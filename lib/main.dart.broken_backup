@@ -1,0 +1,959 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+
+void main() {
+  runApp(const OnoApp());
+}
+
+// ==================== THEME DATA ====================
+class OnoTheme {
+  static const Color auroraStart = Color(0xFF0F4C75);
+  static const Color auroraEnd = Color(0xFF00FFD1);
+  static const Color darkBg = Color(0xFF0A0A0A);
+  static const Color surfaceDark = Color(0xFF1A1A1A);
+
+  static ThemeData darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: darkBg,
+    colorSchemeSeed: auroraEnd,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: darkBg, elevation: 0, foregroundColor: Colors.white,
+      systemOverlayStyle: SystemUiOverlayStyle.light,
+    ),
+    cardTheme: CardTheme(
+      color: surfaceDark, elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true, fillColor: surfaceDark,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+    ),
+  );
+
+  static ThemeData lightTheme = ThemeData(
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+    colorSchemeSeed: auroraStart,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white, elevation: 0, foregroundColor: Colors.black87,
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
+    ),
+    cardTheme: CardTheme(
+      color: Colors.white, elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true, fillColor: Colors.grey.shade100,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      hintStyle: TextStyle(color: Colors.black38),
+    ),
+  );
+}
+
+// ==================== SETTINGS MODEL ====================
+enum AppTheme { dark, light, system }
+enum PrivacyMode { local, cloud, auto }
+enum FontScale { small, medium, large, xlarge }
+
+class OnoSettings {
+  String username;
+  AppTheme appTheme;
+  PrivacyMode privacyMode;
+  FontScale fontScale;
+  bool sendWithEnter;
+  bool showTypingIndicator;
+  String cloudApiKey;
+  String cloudProvider;
+
+  OnoSettings({
+    this.username = 'User',
+    this.appTheme = AppTheme.dark,
+    this.privacyMode = PrivacyMode.local,
+    this.fontScale = FontScale.medium,
+    this.sendWithEnter = false,
+    this.showTypingIndicator = true,
+    this.cloudApiKey = '',
+    this.cloudProvider = 'openai',
+  });
+
+  double get fontSizeMultiplier {
+    switch (fontScale) {
+      case FontScale.small: return 0.85;
+      case FontScale.medium: return 1.0;
+      case FontScale.large: return 1.15;
+      case FontScale.xlarge: return 1.3;
+    }
+  }
+
+  Future<void> save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('username', username);
+    await prefs.setInt('appTheme', appTheme.index);
+    await prefs.setInt('privacyMode', privacyMode.index);
+    await prefs.setInt('fontScale', fontScale.index);
+    await prefs.setBool('sendWithEnter', sendWithEnter);
+    await prefs.setBool('showTypingIndicator', showTypingIndicator);
+    await prefs.setString('cloudApiKey', cloudApiKey);
+    await prefs.setString('cloudProvider', cloudProvider);
+  }
+
+  static Future<OnoSettings> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    return OnoSettings(
+      username: prefs.getString('username') ?? 'User',
+      appTheme: AppTheme.values[prefs.getInt('appTheme') ?? 0],
+      privacyMode: PrivacyMode.values[prefs.getInt('privacyMode') ?? 0],
+      fontScale: FontScale.values[prefs.getInt('fontScale') ?? 1],
+      sendWithEnter: prefs.getBool('sendWithEnter') ?? false,
+      showTypingIndicator: prefs.getBool('showTypingIndicator') ?? true,
+      cloudApiKey: prefs.getString('cloudApiKey') ?? '',
+      cloudProvider: prefs.getString('cloudProvider') ?? 'openai',
+    );
+  }
+
+  OnoSettings copy() => OnoSettings(
+    username: username, appTheme: appTheme, privacyMode: privacyMode,
+    fontScale: fontScale, sendWithEnter: sendWithEnter,
+    showTypingIndicator: showTypingIndicator,
+    cloudApiKey: cloudApiKey, cloudProvider: cloudProvider,
+  );
+}
+
+// ==================== MAIN APP ====================
+class OnoApp extends StatefulWidget {
+  const OnoApp({super.key});
+
+  @override
+  State<OnoApp> createState() => _OnoAppState();
+}
+
+class _OnoAppState extends State<OnoApp> {
+  OnoSettings settings = OnoSettings();
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  void _loadSettings() async {
+    settings = await OnoSettings.load();
+    setState(() => _loaded = true);
+  }
+
+  void updateSettings(OnoSettings newSettings) {
+    setState(() => settings = newSettings);
+    settings.save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: OnoTheme.darkTheme,
+        home: Scaffold(
+          backgroundColor: OnoTheme.darkBg,
+          body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(width: 48, height: 48,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Loading...', style: TextStyle(color: Colors.white54)),
+          ])),
+        ),
+      );
+    }
+
+    Brightness brightness;
+    switch (settings.appTheme) {
+      case AppTheme.dark:
+        brightness = Brightness.dark; break;
+      case AppTheme.light:
+        brightness = Brightness.light; break;
+      case AppTheme.system:
+        brightness = MediaQuery.platformBrightnessOf(context); break;
+    }
+
+    return MaterialApp(
+      title: 'Ono',
+      debugShowCheckedModeBanner: false,
+      theme: OnoTheme.lightTheme,
+      darkTheme: OnoTheme.darkTheme,
+      themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+      home: ChatPage(settings: settings, onSettingsChanged: updateSettings),
+    );
+  }
+}
+
+// ==================== CHAT PAGE ====================
+class ChatPage extends StatefulWidget {
+  final OnoSettings settings;
+  final ValueChanged<OnoSettings> onSettingsChanged;
+
+  const ChatPage({super.key, required this.settings, required this.onSettingsChanged});
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  final List<ChatMessage> _messages = [];
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  String _connectionStatus = 'connecting';
+
+  OnoSettings get settings => widget.settings;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConnection();
+  }
+
+  Future<void> _checkConnection() async {
+    try {
+      final response = await http
+          .get(Uri.parse('http://localhost:8000/health'))
+          .timeout(const Duration(seconds: 2));
+      if (response.statusCode == 200) {
+        setState(() => _connectionStatus = 'connected');
+      } else {
+        setState(() => _connectionStatus = 'error');
+      }
+    } catch (e) {
+      setState(() => _connectionStatus = 'disconnected');
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    if (_controller.text.trim().isEmpty || _isLoading) return;
+    final text = _controller.text.trim();
+    _controller.clear();
+
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+      _isLoading = true;
+    });
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/api/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'message': text,
+          'model': 'qwen2.5:3b',
+          'history': _messages
+              .where((m) => m != _messages.last)
+              .map((m) => {'role': m.isUser ? 'user' : 'assistant', 'content': m.text})
+              .toList(),
+        }),
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _messages.add(ChatMessage(text: data['response'] ?? 'No response', isUser: false));
+        });
+      } else {
+        setState(() {
+          _messages.add(ChatMessage(text: 'Error: ${response.statusCode}', isUser: false));
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add(ChatMessage(text: 'Cannot connect to backend.', isUser: false));
+      });
+    } finally {
+      setState(() => _isLoading = false);
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _goToSettings() async {
+    final result = await Navigator.push<OnoSettings>(
+      context,
+      MaterialPageRoute(builder: (_) => SettingsPage(settings: settings)),
+    );
+    if (result != null) {
+      widget.onSettingsChanged(result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final surfaceColor = isDark ? OnoTheme.surfaceDark : Colors.white;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(children: [
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset('assets/ono_logo.png', fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container()),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text('Ono', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: textColor)),
+          const Spacer(),
+          _buildConnectionIndicator(),
+          const SizedBox(width: 16),
+          IconButton(
+            icon: Icon(Icons.settings_outlined, color: textColor.withOpacity(0.7)),
+            onPressed: _goToSettings, tooltip: 'Settings',
+          ),
+        ]),
+      ),
+      body: Column(children: [
+        Expanded(
+          child: _messages.isEmpty
+              ? _buildEmptyState(isDark, textColor)
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length + (_isLoading && settings.showTypingIndicator ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _messages.length && _isLoading) return _buildTypingIndicator(isDark);
+                    return _buildMessageBubble(_messages[index], isDark, surfaceColor, textColor);
+                  },
+                ),
+        ),
+        _buildInputArea(isDark, surfaceColor, textColor),
+      ]),
+    );
+  }
+
+  Widget _buildConnectionIndicator() {
+    Color color;
+    String tooltip;
+    switch (_connectionStatus) {
+      case 'connected':
+        color = OnoTheme.auroraEnd; tooltip = 'Connected'; break;
+      case 'connecting':
+        color = Colors.orange; tooltip = 'Connecting...'; break;
+      default:
+        color = Colors.redAccent; tooltip = 'Disconnected';
+    }
+    return Tooltip(message: tooltip, child: Container(
+      width: 10, height: 10,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6)]),
+    ));
+  }
+
+  Widget _buildEmptyState(bool isDark, Color textColor) {
+    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Container(width: 80, height: 80,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: OnoTheme.auroraEnd.withOpacity(0.25), blurRadius: 24, spreadRadius: 4)],
+        ),
+      ),
+      const SizedBox(height: 24),
+      Text('Ono', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: textColor)),
+      const SizedBox(height: 8),
+      Text('把糊涂的事理清楚', style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.5))),
+      const SizedBox(height: 32),
+      Text('Try: "帮我总结一下今天的任务"', style: TextStyle(fontSize: 13, color: textColor.withOpacity(0.35), fontStyle: FontStyle.italic)),
+    ]));
+  }
+
+  Widget _buildMessageBubble(ChatMessage message, bool isDark, Color surfaceColor, Color textColor) {
+    final baseFontSize = 15.0 * settings.fontSizeMultiplier;
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(
+      mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (!message.isUser) ...[
+          Container(width: 28, height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Flexible(child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: message.isUser
+                ? const LinearGradient(colors: [OnoTheme.auroraStart, Color(0xFF1a6b8a)])
+                : null,
+            color: message.isUser ? null : surfaceColor,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16), topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(message.isUser ? 16 : 4),
+              bottomRight: Radius.circular(message.isUser ? 4 : 16),
+            ),
+            border: message.userAgent ? null : Border.all(
+                color: isDark ? OnoTheme.auroraEnd.withOpacity(0.15) : Colors.grey.shade300, width: 1),
+          ),
+          child: SelectableText(message.text,
+            style: TextStyle(fontSize: baseFontSize, color: textColor, height: 1.4)),
+        )),
+        if (message.isUser) ...[
+          const SizedBox(width: 8),
+          Container(width: 28, height: 28,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.person, size: 16, color: isDark ? Colors.white70 : Colors.black54),
+          ),
+        ],
+      ],
+    ));
+  }
+
+  Widget _buildTypingIndicator(bool isDark) {
+    final surfaceColor = isDark ? OnoTheme.surfaceDark : Colors.white;
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
+      Container(width: 28, height: 28,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16),
+              bottomLeft: Radius.circular(4), bottomRight: Radius.circular(16)),
+          border: Border.all(color: isDark ? OnoTheme.auroraEnd.withOpacity(0.15) : Colors.grey.shade300),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (int i = 0; i < 3; i++) ...[
+            _buildTypingDot(i),
+            if (i < 2) const SizedBox(width: 4),
+          ],
+        ]),
+      ),
+    ]));
+  }
+
+  Widget _buildTypingDot(int index) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 600 + (index * 200)),
+      builder: (context, value, child) => Opacity(
+        opacity: 0.4 + (value * 0.6),
+        child: Container(width: 8, height: 8,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputArea(bool isDark, Color surfaceColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? OnoTheme.darkBg : Colors.white,
+        border: Border(top: BorderSide(
+            color: isDark ? OnoTheme.auroraEnd.withOpacity(0.08) : Colors.grey.shade200, width: 1)),
+      ),
+      child: SafeArea(child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(child: Container(
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: isDark ? OnoTheme.auroraEnd.withOpacity(0.25) : Colors.grey.shade300, width: 1),
+          ),
+          child: TextField(
+            controller: _controller,
+            style: TextStyle(color: textColor, fontSize: 15 * settings.fontSizeMultiplier),
+            maxLines: 4, minLines: 1,
+            textInputAction: settings.sendWithEnter ? TextInputAction.send : TextInputAction.newline,
+            onSubmitted: (_) { if (settings.sendWithEnter) _sendMessage(); },
+            decoration: InputDecoration(
+              hintText: 'Message Ono...',
+              hintStyle: TextStyle(color: textColor.withOpacity(0.35)),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+          ),
+        )),
+        const SizedBox(width: 12),
+        Container(decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [OnoTheme.auroraStart, OnoTheme.auroraEnd]),
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: OnoTheme.auroraEnd.withOpacity(0.3), blurRadius: 10)],
+        ), child: IconButton(
+          icon: const Icon(Icons.send, color: Colors.white),
+          onPressed: _isLoading ? null : _sendMessage,
+        )),
+      ])),
+    );
+  }
+}
+
+class ChatMessage {
+  final String text;
+  final bool isUser;
+  ChatMessage({required this.text, required this.isUser});
+}
+
+// ==================== SETTINGS PAGE ====================
+class SettingsPage extends StatefulWidget {
+  final OnoSettings settings;
+  const SettingsPage({super.key, required this.settings});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  late OnoSettings s;
+
+  @override
+  void initState() {
+    super.initState();
+    s = widget.settings.copy();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subColor = textColor.withOpacity(0.5);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'), centerTitle: true,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, s),
+            child: Text('Done', style: TextStyle(color: OnoTheme.auroraEnd, fontWeight: FontWeight.w600, fontSize: 16)),
+          ),
+        ],
+      ),
+      body: ListView(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), children: [
+
+        // ---- Profile Section ----
+        _SectionHeader(label: 'PROFILE', subColor: subColor),
+        const SizedBox(height: 8),
+        _SettingsCard(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: InkWell(
+          onTap: () => _editUsername(context, isDark),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Row(children: [
+            Container(width: 34, height: 34,
+              decoration: BoxDecoration(color: OnoTheme.auroraStart.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.person_outline_rounded, size: 18, color: OnoTheme.auroraStart),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: Text('Username', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: textColor))),
+            Text(s.username, style: TextStyle(fontSize: 13.5, color: subColor)),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: subColor, size: 20),
+          ])),
+        ))),
+
+        const SizedBox(height: 24),
+
+        // ---- Appearance Section ----
+        _SectionHeader(label: 'APPEARANCE', subColor: subColor),
+        const SizedBox(height: 8),
+        _SettingsCard(child: Column(children: [
+          _settingRow(icon: Icons.palette_outlined, iconBg: Colors.purple, label: 'Theme',
+              value: _themeLabel(s.appTheme), subColor: subColor, textColor: textColor,
+              onTap: () => _pickTheme(context, isDark)),
+          _divider(isDark),
+          _settingRow(icon: Icons.text_fields_outlined, iconBg: Colors.orange, label: 'Font Size',
+              value: _fontLabel(s.fontScale), subColor: subColor, textColor: textColor,
+              onTap: () => _pickFontSize(context, isDark)),
+        ])),
+
+        const SizedBox(height: 24),
+
+        // ---- Privacy & AI Section ----
+        _SectionHeader(label: 'PRIVACY & AI', subColor: subColor),
+        const SizedBox(height: 8),
+        _SettingsCard(child: Column(children: [
+          _settingRow(icon: Icons.shield_outlined, iconBg: Colors.green, label: 'AI Mode',
+              value: _privacyLabel(s.privacyMode), subColor: subColor, textColor: textColor,
+              onTap: () => _pickPrivacyMode(context, isDark)),
+          _divider(isDark),
+          _settingRow(icon: Icons.cloud_outlined, iconBg: Colors.blue, label: 'Cloud Provider',
+              value: s.cloudProvider.toUpperCase(), subColor: subColor, textColor: textColor,
+              onTap: () => _pickCloudProvider(context, isDark)),
+          _divider(isDark),
+          _settingRow(icon: Icons.vpn_key_outlined, iconBg: Colors.teal, label: 'API Key',
+              value: s.cloudApiKey.isEmpty ? 'Not set' : '••••••••••••', subColor: subColor, textColor: textColor,
+              onTap: () => _editApiKey(context, isDark)),
+        ])),
+
+        const SizedBox(height: 24),
+
+        // ---- Chat Section ----
+        _SectionHeader(label: 'CHAT', subColor: subColor),
+        const SizedBox(height: 8),
+        _SettingsCard(child: Column(children: [
+          _switchRow(icon: Icons.keyboard_return_outlined, iconBg: Colors.indigo,
+              label: 'Send with Enter', subtitle: 'Press Enter to send, Shift+Enter for new line',
+              value: s.sendWithEnter, onChanged: (v) => setState(() => s.sendWithEnter = v),
+              isDark: isDark, textColor: textColor),
+          _divider(isDark),
+          _switchRow(icon: Icons.animation_outlined, iconBg: Colors.pink,
+              label: 'Typing Indicator', subtitle: 'Show animated dots while Ono thinks',
+              value: s.showTypingIndicator, onChanged: (v) => setState(() => s.showTypingIndicator = v),
+              isDark: isDark, textColor: textColor),
+        ])),
+
+        const SizedBox(height: 24),
+
+        // ---- About Section ----
+        _SectionHeader(label: 'ABOUT', subColor: subColor),
+        const SizedBox(height: 8),
+        _SettingsCard(child: Column(children: [
+          _infoRow(icon: Icons.info_outline, iconBg: Colors.grey, label: 'Version', value: '0.1.0-alpha', textColor: textColor, subColor: subColor),
+          _divider(isDark),
+          _infoRow(icon: Icons.code_outlined, iconBg: Colors.grey, label: 'License', value: 'AGPL v3 (Core)', textColor: textColor, subColor: subColor),
+          _divider(isDark),
+          _infoRow(icon: Icons.favorite_outline, iconBg: Colors.red, label: 'Made by', value: 'Oakley Chen', textColor: textColor, subColor: subColor),
+        ])),
+
+        const SizedBox(height: 32),
+
+        // Danger zone
+        _SettingsCard(
+          color: isDark ? Colors.red.withOpacity(0.08) : Colors.red.shade50,
+          borderColor: Colors.red.withOpacity(0.3),
+          child: InkWell(
+            onTap: () => _confirmClearData(context, isDark),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), child: Row(children: [
+              Icon(Icons.delete_forever_outlined, color: Colors.red.shade400),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Clear All Data', style: TextStyle(color: Colors.red.shade400, fontSize: 15)),
+                Text('Delete chat history & preferences', style: TextStyle(color: Colors.red.shade300, fontSize: 13)),
+              ])),
+            ])),
+          ),
+        ),
+
+        const SizedBox(height: 40),
+      ]),
+    );
+  }
+
+  Widget _divider(bool isDark) => Divider(
+    height: 1, indent: 56,
+    color: isDark ? Colors.white.withAlpha(26) : Colors.black.withAlpha(26),
+  );
+
+  Widget _settingRow({required IconData icon, required Color iconBg, required String label,
+      required String value, required Color subColor, required Color textColor, required VoidCallback onTap}) {
+    return InkWell(onTap: onTap, child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(children: [
+        Container(width: 34, height: 34,
+          decoration: BoxDecoration(color: iconBg.withAlpha(38), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: iconBg),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: textColor))),
+        Text(value, style: TextStyle(fontSize: 13.5, color: subColor)),
+        const SizedBox(width: 4),
+        Icon(Icons.chevron_right, color: subColor, size: 20),
+      ],
+    )));
+  }
+
+  Widget _switchRow({required IconData icon, required Color iconBg, required String label,
+      required String subtitle, required bool value, required ValueChanged<bool> onChanged,
+      required bool isDark, required Color textColor}) {
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Row(children: [
+      Container(width: 34, height: 34,
+        decoration: BoxDecoration(color: iconBg.withAlpha(38), borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, size: 18, color: iconBg),
+      ),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: textColor)),
+        Text(subtitle, style: TextStyle(fontSize: 12, color: textColor.withOpacity(0.4))),
+      ])),
+      Switch(value: value, onChanged: onChanged,
+        activeColor: OnoTheme.auroraEnd,
+        activeTrackColor: OnoTheme.auroraEnd.withOpacity(0.3),
+        inactiveTrackColor: isDark ? Colors.white.withAlpha(26) : Colors.black.withAlpha(26),
+        inactiveThumbColor: isDark ? Colors.white.withAlpha(77) : Colors.black.withAlpha(77)),
+    ]));
+  }
+
+  Widget _infoRow({required IconData icon, required Color iconBg, required String label,
+      required String value, required Color textColor, required Color subColor}) {
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13), child: Row(children: [
+      Container(width: 34, height: 34,
+        decoration: BoxDecoration(color: iconBg.withAlpha(38), borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, size: 18, color: iconBg),
+      ),
+      const SizedBox(width: 14),
+      Expanded(child: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: textColor))),
+      Text(value, style: TextStyle(fontSize: 13.5, color: subColor)),
+    ]));
+  }
+
+  // ========== Dialog & Sheet Methods ==========
+
+  void _editUsername(BuildContext context, bool isDark) {
+    final ctrl = TextEditingController(text: s.username);
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Username', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+      content: TextField(ctrl, autofocus: true,
+        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        decoration: InputDecoration(hintText: 'Enter your name',
+            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38)),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: subColorFor(isDark)))),
+        TextButton(onPressed: () {
+          if (ctrl.text.trim().isNotEmpty) setState(() => s.username = ctrl.text.trim());
+          Navigator.pop(ctx);
+        }, child: Text('Save', style: TextStyle(color: OnoTheme.auroraEnd))),
+      ],
+    ));
+  }
+
+  void _pickTheme(BuildContext context, bool isDark) {
+    showModalBottomSheet(context: context,
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(child: Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Choose Theme', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87)),
+        const SizedBox(height: 16),
+        _themeOption(ctx, AppTheme.dark, '🌙 Dark', Icons.nightlight_round, 'Deep black with aurora accents', isDark),
+        _themeOption(ctx, AppTheme.light, '☀️ Light', Icons.wb_sunny_round, 'Clean white with soft colors', isDark),
+        _themeOption(ctx, AppTheme.system, '💻 System', Icons.laptop_mac, 'Follow your device setting', isDark),
+      ])));
+  }
+
+  Widget _themeOption(BuildContext ctx, AppTheme t, String label, IconData icon, String desc, bool isDark) {
+    final selected = s.appTheme == t;
+    return InkWell(onTap: () { setState(() => s.appTheme = t); Navigator.pop(ctx); },
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), child: Row(children: [
+        Icon(icon, color: selected ? OnoTheme.auroraEnd : (isDark ? Colors.white54 : Colors.black45)), const SizedBox(width: 16),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: isDark ? Colors.white : Colors.black87)),
+          Text(desc, style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.black38)),
+        ])),
+        if (selected) Icon(Icons.check_circle, color: OnoTheme.auroraEnd, size: 22),
+      ])));
+  }
+
+  void _pickFontSize(BuildContext context, bool isDark) {
+    showModalBottomSheet(context: context,
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(child: Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Font Size', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87)),
+        const SizedBox(height: 16),
+        _fontOption(ctx, FontScale.small, 'Small', 'A', 12, isDark),
+        _fontOption(ctx, FontScale.medium, 'Medium (Default)', 'A+', 15, isDark),
+        _fontOption(ctx, FontScale.large, 'Large', 'A++', 18, isDark),
+        _fontOption(ctx, FontScale.xlarge, 'Extra Large', 'A+++', 22, isDark),
+      ])));
+  }
+
+  Widget _fontOption(BuildContext ctx, FontScale fs, String label, String preview, double size, bool isDark) {
+    final selected = s.fontScale == fs;
+    return InkWell(onTap: () { setState(() => s.fontScale = fs); Navigator.pop(ctx); },
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), child: Row(children: [
+        SizedBox(width: 40, child: Text(preview, style: TextStyle(fontSize: size, fontWeight: FontWeight.bold,
+            color: selected ? OnoTheme.auroraEnd : (isDark ? Colors.white54 : Colors.black45)))),
+        Expanded(child: Text(label, style: TextStyle(fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: isDark ? Colors.white : Colors.black87))),
+        if (selected) Icon(Icons.check_circle, color: OnoTheme.auroraEnd, size: 22),
+      ])));
+  }
+
+  void _pickPrivacyMode(BuildContext context, bool isDark) {
+    showModalBottomSheet(context: context,
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(child: Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), children: [
+          Text('AI Mode', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87)),
+          const SizedBox(height: 8),
+          Text('How Ono processes your conversations', style: TextStyle(fontSize: 13, color: isDark ? Colors.white38 : Colors.black38)),
+        ]),
+        const SizedBox(height: 12),
+        _privacyOption(ctx, PrivacyMode.local, '🔒 Privacy Mode (Recommended)',
+            'Local Ollama only. Data never leaves your device. Works offline.', OnoTheme.auroraEnd, isDark),
+        _privacyOption(ctx, PrivacyMode.cloud, '☁️ Cloud Mode',
+            'Use powerful cloud AI (OpenAI/Claude). Requires internet.', Colors.blue, isDark),
+        _privacyOption(ctx, PrivacyMode.auto, '🔄 Smart Mode',
+            'Auto-switch: cloud when online, local when offline or sensitive topic detected.', Colors.orange, isDark),
+      ])));
+  }
+
+  Widget _privacyOption(BuildContext ctx, PrivacyMode pm, String title, String desc, Color accent, bool isDark) {
+    final selected = s.privacyMode == pm;
+    return InkWell(onTap: () { setState(() => s.privacyMode = pm); Navigator.pop(ctx); },
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+            color: selected ? accent : (isDark ? Colors.white30 : Colors.black26), size: 22),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(fontWeight: selected ? FontWeight.w600 : FontWeight.normal, fontSize: 14.5, color: isDark ? Colors.white : Colors.black87)),
+          const SizedBox(height: 3),
+          Text(desc, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white38 : Colors.black45, height: 1.35)),
+        ])),
+      ])));
+  }
+
+  void _pickCloudProvider(BuildContext context, bool isDark) {
+    showModalBottomSheet(context: context,
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(child: Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Cloud Provider', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87)),
+        const SizedBox(height: 16),
+        _providerOption(ctx, 'openai', 'OpenAI', 'GPT-4o / GPT-4o-mini', isDark),
+        _providerOption(ctx, 'claude', 'Anthropic Claude', 'Claude Sonnet / Haiku', isDark),
+        _providerOption(ctx, 'gemini', 'Google Gemini', 'Gemini Pro / Flash', isDark),
+      ])));
+  }
+
+  Widget _providerOption(BuildContext ctx, String id, String name, String models, bool isDark) {
+    final selected = s.cloudProvider == id;
+    return InkWell(onTap: () { setState(() => s.cloudProvider = id); Navigator.pop(ctx); },
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), child: Row(children: [
+        Container(width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: selected ? OnoTheme.auroraStart.withAlpha(51) : (isDark ? Colors.white.withAlpha(26) : Colors.black.withAlpha(15)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(selected ? Icons.cloud_done : Icons.cloud_outlined,
+              size: 18, color: selected ? OnoTheme.auroraEnd : (isDark ? Colors.white38 : Colors.black38))),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, style: TextStyle(fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: isDark ? Colors.white : Colors.black87)),
+          Text(models, style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.black38)),
+        ])),
+        if (selected) Icon(Icons.check_circle, color: OnoTheme.auroraEnd, size: 22),
+      ])));
+  }
+
+  void _editApiKey(BuildContext context, bool isDark) {
+    final ctrl = TextEditingController(text: s.cloudApiKey);
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('API Key', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        TextField(ctrl, obscureText: true, autofocus: true,
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontFamily: 'monospace'),
+          decoration: InputDecoration(hintText: 'sk-...',
+              hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontFamily: 'monospace')),
+        ),
+        const SizedBox(height: 8),
+        Text('Your key is stored locally and only sent to the selected cloud provider.',
+            style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white30 : Colors.black38)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: subColorFor(isDark)))),
+        TextButton(onPressed: () { setState(() => s.cloudApiKey = ctrl.text.trim()); Navigator.pop(ctx); },
+            child: Text('Save', style: TextStyle(color: OnoTheme.auroraEnd))),
+      ],
+    ));
+  }
+
+  void _confirmClearData(BuildContext context, bool isDark) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: isDark ? OnoTheme.surfaceDark : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('⚠️ Clear All Data?', style: TextStyle(color: Colors.red.shade400)),
+      content: Text('This will delete all chat history and reset all preferences.\n\nThis cannot be undone.',
+          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: subColorFor(isDark)))),
+        TextButton(onPressed: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.clear();
+          if (mounted) Navigator.popUntil(ctx, (r) => r.isFirst);
+        }, child: Text('Delete Everything', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w600))),
+      ],
+    ));
+  }
+
+  String _themeLabel(AppTheme t) => {'dark': '🌙 Dark', 'light': '☀️ Light', 'system': '💻 System'}[t.name]!;
+  String _fontLabel(FontScale f) => {'small': 'Small', 'medium': 'Medium', 'large': 'Large', 'xlarge': 'X-Large'}[f.name]!;
+  String _privacyLabel(PrivacyMode p) => {'local': '🔒 Local', 'cloud': '☁️ Cloud', 'auto': '🔄 Auto'}[p.name]!;
+  Color subColorFor(bool isDark) => isDark ? Colors.white60 : Colors.black45;
+}
+
+// ==================== REUSABLE WIDGETS ====================
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final Color subColor;
+  const _SectionHeader({required this.label, required this.subColor});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 4),
+    child: Text(label.toUpperCase(), style: TextStyle(
+        fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.8, color: subColor)),
+  );
+}
+
+class _SettingsCard extends StatelessWidget {
+  final Widget child;
+  final Color? color;
+  final Color? borderColor;
+  const _SettingsCard({required this.child, this.color, this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: color ?? (isDark ? OnoTheme.surfaceDark : Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor ?? (isDark ? Colors.white.withAlpha(26) : Colors.black.withAlpha(26))),
+        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+      ),
+      child: child,
+    );
+  }
+}
