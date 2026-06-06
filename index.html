@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ono - Privacy-First AI Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0A0E1A;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0,255,209,0.08) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+            border-radius: 60px;
+            background: linear-gradient(135deg, #0F4C75, #00FFD1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 32px;
+            box-shadow: 0 0 60px rgba(0,255,209,0.2);
+        }
+
+        h1 {
+            font-size: 64px;
+            font-weight: 800;
+            letter-spacing: -2px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #fff 0%, #00FFD1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tagline-cn {
+            font-size: 24px;
+            color: #00FFD1;
+            margin-bottom: 8px;
+        }
+
+        .tagline-en {
+            font-size: 18px;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 48px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #0F4C75, #00FFD1);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 30px rgba(0,255,209,0.3);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 40px rgba(0,255,209,0.5);
+        }
+
+        .download-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .platform-note {
+            margin-top: 16px;
+            color: rgba(255,255,255,0.4);
+            font-size: 14px;
+        }
+
+        .features {
+            padding: 80px 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 36px;
+            margin-bottom: 60px;
+            background: linear-gradient(135deg, #fff 0%, #00FFD1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 32px;
+        }
+
+        .feature-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(0,255,209,0.1);
+            border-radius: 20px;
+            padding: 32px;
+            transition: border-color 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(0,255,209,0.3);
+        }
+
+        .feature-icon {
+            font-size: 40px;
+            margin-bottom: 16px;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #00FFD1;
+        }
+
+        .feature-card p {
+            font-size: 15px;
+            color: rgba(255,255,255,0.6);
+            line-height: 1.6;
+        }
+
+        .how-it-works {
+            padding: 80px 20px;
+            text-align: center;
+        }
+
+        .how-it-works h2 {
+            font-size: 36px;
+            margin-bottom: 48px;
+            background: linear-gradient(135deg, #fff 0%, #00FFD1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .steps {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .step {
+            flex: 1;
+            min-width: 200px;
+            max-width: 260px;
+        }
+
+        .step-num {
+            width: 48px;
+            height: 48px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #0F4C75, #00FFD1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0 auto 16px;
+        }
+
+        .step h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .step p {
+            font-size: 14px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .footer {
+            padding: 40px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .footer p {
+            color: rgba(255,255,255,0.3);
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: #00FFD1;
+            text-decoration: none;
+        }
+
+        .opensource {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 8px 16px;
+            border: 1px solid rgba(0,255,209,0.2);
+            border-radius: 20px;
+            color: #00FFD1;
+            font-size: 13px;
+        }
+
+        @media (max-width: 640px) {
+            h1 { font-size: 42px; }
+            .tagline-cn { font-size: 18px; }
+            .features h2, .how-it-works h2 { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+
+<section class="hero">
+    <div class="logo">O</div>
+    <h1>Ono</h1>
+    <p class="tagline-cn">把糊涂的事理清楚</p>
+    <p class="tagline-en">Privacy-first AI assistant that runs entirely on your device</p>
+    <a href="https://github.com/zechengccc-alt/ono/releases/download/v1.0.0/Ono-macOS-v1.0.0.zip" class="download-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download for macOS
+    </a>
+    <p class="platform-note">Requires macOS 14+ &bull; Apple Silicon &bull; Ollama</p>
+</section>
+
+<section class="features">
+    <h2>Your Data, Your Device</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>100% Local</h3>
+            <p>All AI processing happens on your Mac. No data ever leaves your device. Zero cloud dependency.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Instant & Offline</h3>
+            <p>Works without internet. Ollama runs local models (Qwen 2.5) for instant, private responses.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <h3>Smart Memory</h3>
+            <p>Remembers your conversations locally. SQLite stores everything on your machine, nowhere else.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎨</div>
+            <h3>Beautiful & Simple</h3>
+            <p>Dark mode, clean interface, one-click setup. Built with Flutter for a native feel.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔓</div>
+            <h3>Open Source</h3>
+            <p>Core features are AGPL v3 licensed. Audit the code, contribute, or fork it yourself.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h3>Multi-Platform</h3>
+            <p>macOS today, iOS & Android coming soon. One codebase, every device.</p>
+        </div>
+    </div>
+</section>
+
+<section class="how-it-works">
+    <h2>How It Works</h2>
+    <div class="steps">
+        <div class="step">
+            <div class="step-num">1</div>
+            <h3>Install Ollama</h3>
+            <p>Download Ollama and pull the Qwen 2.5 model — takes 2 minutes.</p>
+        </div>
+        <div class="step">
+            <div class="step-num">2</div>
+            <h3>Open Ono</h3>
+            <p>Double-click the app. Backend starts automatically, no terminal needed.</p>
+        </div>
+        <div class="step">
+            <div class="step-num">3</div>
+            <h3>Chat Privately</h3>
+            <p>Ask anything. Everything stays on your Mac. No accounts, no tracking.</p>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <p>Built by a student, for students. &bull; <a href="https://github.com/zechengccc-alt/ono">GitHub</a></p>
+    <div class="opensource">🔓 Open Core &bull; AGPL v3</div>
+</footer>
+
+</body>
+</html>
