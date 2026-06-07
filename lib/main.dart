@@ -240,7 +240,7 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          '把糊涂的事理清楚',
+                          'Ask me anything, I am fully local and private',
                           style: TextStyle(
                             color: Color(0xFF00FFD1),
                             fontSize: 18,
