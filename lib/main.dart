@@ -7,12 +7,16 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+const String _currentVersion = '2.0.0';
+const String _repoOwner = 'zechengccc-alt';
+const String _repoName = 'ono';
+
 void main() {
   runApp(const OnoApp());
 }
 
 // ============================================================
-// SPLASH SCREEN - Brand loading animation
+// SPLASH SCREEN
 // ============================================================
 
 class SplashScreen extends StatefulWidget {
@@ -70,7 +74,6 @@ class _SplashScreenState extends State<SplashScreen>
             return Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo with scale + glow animation
                 Transform.scale(
                   scale: _scaleAnim.value,
                   child: Container(
@@ -103,7 +106,6 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 32),
-                // App name fade-in
                 Opacity(
                   opacity: _opacityAnim.value,
                   child: Text(
@@ -118,7 +120,6 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Tagline fade-in (delayed)
                 FadeTransition(
                   opacity: _glowAnim,
                   child: const Text(
@@ -131,7 +132,6 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 48),
-                // Loading dots
                 SizedBox(
                   width: 40,
                   child: Row(
@@ -223,7 +223,7 @@ class _OnoAppState extends State<OnoApp> {
 // ============================================================
 
 class ChatMessage {
-  final int? id; // SQLite row id
+  final int? id;
   final String content;
   final bool isUser;
   final String timestamp;
@@ -304,7 +304,6 @@ class OnoDatabase {
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, 'ono.db');
     return await openDatabase(path, version: 1, onCreate: (db, version) async {
-      // Sessions table
       await db.execute('''
         CREATE TABLE sessions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,7 +311,6 @@ class OnoDatabase {
           created_at TEXT NOT NULL DEFAULT ''
         )
       ''');
-      // Messages table
       await db.execute('''
         CREATE TABLE messages (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -360,6 +358,67 @@ class OnoDatabase {
 }
 
 // ============================================================
+// AUTO-UPDATE CHECKER
+// ============================================================
+
+class UpdateInfo {
+  final String latestVersion;
+  final String downloadUrl;
+  final String releaseNotes;
+
+  UpdateInfo({
+    required this.latestVersion,
+    required this.downloadUrl,
+    required this.releaseNotes,
+  });
+}
+
+/// Compare semver strings. Returns true if remote > local.
+bool _isNewerVersion(String remote, String local) {
+  final r = remote.replaceFirst('v', '').split('.').map(int.parse).toList();
+  final l = local.replaceFirst('v', '').split('.').map(int.parse).toList();
+  for (int i = 0; i < 3; i++) {
+    if ((i < r.length ? r[i] : 0) > (i < l.length ? l[i] : 0)) return true;
+    if ((i < r.length ? r[i] : 0) < (i < l.length ? l[i] : 0)) return false;
+  }
+  return false;
+}
+
+Future<UpdateInfo?> checkForUpdate() async {
+  try {
+    final url = Uri.parse(
+        'https://api.github.com/repos/$_repoOwner/$_repoName/releases/latest');
+    final response = await http.get(url, headers: {
+      'Accept': 'application/vnd.github+json',
+    }).timeout(const Duration(seconds: 5));
+
+    if (response.statusCode != 200) return null;
+
+    final data = jsonDecode(response.body);
+    final tag = data['tag_name'] as String? ?? '';
+    if (!_isNewerVersion(tag, _currentVersion)) return null;
+
+    // Find the macOS zip asset
+    String downloadUrl = '';
+    for (final asset in (data['assets'] as List)) {
+      final name = (asset['name'] as String?) ?? '';
+      if (name.contains('macOS') && name.endsWith('.zip')) {
+        downloadUrl = asset['browser_download_url'] as String? ?? '';
+        break;
+      }
+    }
+
+    return UpdateInfo(
+      latestVersion: tag,
+      downloadUrl: downloadUrl,
+      releaseNotes: (data['body'] as String?) ?? '',
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+// ============================================================
 // MAIN CHAT PAGE
 // ============================================================
 
@@ -380,7 +439,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _isLoading = false;
   String _selectedModel = 'qwen2.5:3b';
   bool _backendConnected = false;
-  bool _isPro = true; // Default pro for now
+  bool _isPro = true;
   bool _ollamaRunning = false;
 
   // Settings
@@ -436,10 +495,77 @@ class _ChatPageState extends State<ChatPage> {
     await _autoStartAll();
     _checkBackend();
     _checkOllama();
+    // Check for updates (non-blocking)
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final update = await checkForUpdate();
+    if (update == null || !mounted) return;
+
+    // Don't remind more than once per version
+    final prefs = await SharedPreferences.getInstance();
+    final skipped = prefs.getString('skipped_version') ?? '';
+    if (skipped == update.latestVersion) return;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF111827),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF00FFD1), width: 1)),
+        title: Text('Update Available',
+            style: TextStyle(color: const Color(0xFF00FFD1))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Ono ${update.latestVersion} is available (you have v$_currentVersion).',
+                style: TextStyle(color: Colors.white70)),
+            if (update.releaseNotes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(update.releaseNotes,
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              prefs.setString('skipped_version', update.latestVersion);
+              Navigator.pop(ctx);
+            },
+            child: Text('Skip This Version',
+                style: TextStyle(color: Colors.white38)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _launchUrl(update.downloadUrl);
+            },
+            child: Text('Download Update',
+                style: TextStyle(color: const Color(0xFF00FFD1))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _launchUrl(String url) async {
+    if (url.isEmpty) return;
+    try {
+      await Process.run('open', [url]);
+    } catch (_) {}
   }
 
   Future<void> _newSession() async {
-    final id = await OnoDatabase.createSession('New Chat ${DateTime.now().hour}:${DateTime.now().minute}');
+    final id = await OnoDatabase.createSession(
+        'New Chat ${DateTime.now().hour}:${DateTime.now().minute}');
     final sessions = await OnoDatabase.getSessions();
     setState(() {
       _sessions = sessions;
@@ -478,7 +604,6 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _autoStartOllama() async {
     if (await _isPortOpen(11434)) {
-      print('[Ono] Ollama already running on port 11434');
       setState(() => _ollamaRunning = true);
       return;
     }
@@ -488,55 +613,44 @@ class _ChatPageState extends State<ChatPage> {
       '/usr/bin/ollama',
     ];
     String? ollamaPath;
-    for (final p in ollamaPaths) {
-      if (await File(p).exists()) { ollamaPath = p; break; }
+    for (final path in ollamaPaths) {
+      if (await File(path).exists()) {
+        ollamaPath = path;
+        break;
+      }
     }
-    if (ollamaPath == null) {
-      print('[Ono] Ollama not found.');
-      return;
-    }
+    if (ollamaPath == null) return;
     try {
-      print('[Ono] Starting Ollama...');
-      final proc = await Process.start(ollamaPath!, ['serve']);
+      final proc = await Process.start(ollamaPath, ['serve']);
       proc.stdout.listen((_) {});
       proc.stderr.listen((_) {});
       for (int i = 0; i < 10; i++) {
         await Future.delayed(const Duration(seconds: 1));
         if (await _isPortOpen(11434)) {
-          print('[Ono] Ollama ready');
           setState(() => _ollamaRunning = true);
           return;
         }
       }
       setState(() => _ollamaRunning = true);
-    } catch (e) { print('[Ono] Failed to start Ollama: $e'); }
+    } catch (_) {}
   }
 
   Future<void> _autoStartBackend() async {
-    if (await _isPortOpen(8000)) {
-      print('[Ono] Backend already running');
-      return;
-    }
+    if (await _isPortOpen(8000)) return;
     try {
       final executable = Platform.resolvedExecutable;
       final bundleDir = File(executable).parent.path;
       final backendPath = '$bundleDir/ono_backend';
       if (await File(backendPath).exists()) {
-        print('[Ono] Starting bundled backend...');
         final proc = await Process.start(backendPath, []);
         proc.stdout.listen((_) {});
         proc.stderr.listen((_) {});
         for (int i = 0; i < 10; i++) {
           await Future.delayed(const Duration(seconds: 1));
-          if (await _isPortOpen(8000)) {
-            print('[Ono] Backend ready');
-            return;
-          }
+          if (await _isPortOpen(8000)) return;
         }
-      } else {
-        print('[Ono] Bundled backend not found at $backendPath');
       }
-    } catch (e) { print('[Ono] Failed to start backend: $e'); }
+    } catch (_) {}
   }
 
   Future<void> _checkBackend() async {
@@ -610,11 +724,12 @@ class _ChatPageState extends State<ChatPage> {
 
         // Auto-update session title from first user message
         if (_messages.where((m) => m.isUser).length <= 1) {
-          final shortTitle = text.length > 30 ? '${text.substring(0, 30)}...' : text;
+          final shortTitle =
+              text.length > 30 ? '${text.substring(0, 30)}...' : text;
           final d = await OnoDatabase.db;
           await d.update('sessions', {'title': shortTitle},
               where: 'id = ?', whereArgs: [_currentSessionId]);
-          _loadSessions(); // refresh sidebar
+          _loadSessions();
         }
       } else {
         final errMsg = ChatMessage(
@@ -626,7 +741,7 @@ class _ChatPageState extends State<ChatPage> {
         await OnoDatabase.addMessage(errMsg);
         setState(() => _messages.add(errMsg));
       }
-    } catch (e) {
+    } catch (_) {
       final errMsg = ChatMessage(
         content: 'Cannot connect to Ono backend. Is it running?',
         isUser: false,
@@ -643,7 +758,8 @@ class _ChatPageState extends State<ChatPage> {
 
   void _clearCurrentChat() async {
     final d = await OnoDatabase.db;
-    await d.delete('messages', where: 'session_id = ?', whereArgs: [_currentSessionId]);
+    await d.delete('messages',
+        where: 'session_id = ?', whereArgs: [_currentSessionId]);
     setState(() => _messages.clear());
   }
 
@@ -669,25 +785,26 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  // Get current colors based on theme mode
-  Color get _bgColor => _themeMode == ThemeMode.dark
-      ? const Color(0xFF0A0E1A)
-      : const Color(0xFFF5F7FA);
-  Color get _surfaceColor => _themeMode == ThemeMode.dark
-      ? const Color(0xFF111827)
-      : Colors.white;
-  Color get _inputBgColor => _themeMode == ThemeMode.dark
-      ? const Color(0xFF0A0E1A)
-      : const Color(0xFFE8ECF0);
-  Color get _borderColor => _themeMode == ThemeMode.dark
-      ? const Color(0xFF1A1F36)
-      : const Color(0xFFD0D5DD);
-  Color get _textColor => _themeMode == ThemeMode.dark
-      ? Colors.white : const Color(0xFF111827);
-  Color get _textSecondaryColor => _themeMode == ThemeMode.dark
-      ? Colors.white54 : const Color(0xFF6B7280);
-  Color get _hintTextColor => _themeMode == ThemeMode.dark
-      ? Colors.white38 : const Color(0xFF9CA3AF);
+  Color get _bgColor =>
+      _themeMode == ThemeMode.dark
+          ? const Color(0xFF0A0E1A)
+          : const Color(0xFFF5F7FA);
+  Color get _surfaceColor =>
+      _themeMode == ThemeMode.dark ? const Color(0xFF111827) : Colors.white;
+  Color get _inputBgColor =>
+      _themeMode == ThemeMode.dark
+          ? const Color(0xFF0A0E1A)
+          : const Color(0xFFE8ECF0);
+  Color get _borderColor =>
+      _themeMode == ThemeMode.dark
+          ? const Color(0xFF1A1F36)
+          : const Color(0xFFD0D5DD);
+  Color get _textColor =>
+      _themeMode == ThemeMode.dark ? Colors.white : const Color(0xFF111827);
+  Color get _textSecondaryColor =>
+      _themeMode == ThemeMode.dark ? Colors.white54 : const Color(0xFF6B7280);
+  Color get _hintTextColor =>
+      _themeMode == ThemeMode.dark ? Colors.white38 : const Color(0xFF9CA3AF);
 
   @override
   Widget build(BuildContext context) {
@@ -705,30 +822,62 @@ class _ChatPageState extends State<ChatPage> {
           title: Row(
             children: [
               Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Center(child: Text('O',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                child: Center(
+                    child: Text('O',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14))),
               ),
               const SizedBox(width: 8),
-              Text('Ono', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Ono',
+                  style: TextStyle(
+                      color: const Color(0xFF00FFD1),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold)),
               if (_isPro) ...[
                 const SizedBox(width: 4),
-                Container(padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.amber, Colors.orange]), borderRadius: BorderRadius.circular(6)),
-                  child: Text('PRO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+                Container(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                        gradient:
+                            LinearGradient(colors: [Colors.amber, Colors.orange]),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: Text('PRO',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold))),
               ],
               const Spacer(),
-              Container(width: 7, height: 7, decoration: BoxDecoration(color: _backendConnected ? Colors.green : Colors.red, shape: BoxShape.circle)),
+              Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                      color: _backendConnected ? Colors.green : Colors.red,
+                      shape: BoxShape.circle)),
               const SizedBox(width: 4),
-              Text(_backendConnected ? 'Connected' : 'Offline', style: TextStyle(color: _backendConnected ? Colors.green : Colors.red, fontSize: 11)),
+              Text(
+                  _backendConnected ? 'Connected' : 'Offline',
+                  style: TextStyle(
+                      color: _backendConnected ? Colors.green : Colors.red,
+                      fontSize: 11)),
               const SizedBox(width: 6),
-              IconButton(icon: Icon(Icons.delete_outline, color: _textSecondaryColor.withOpacity(0.5), size: 18),
-                  onPressed: _messages.isEmpty ? null : _clearCurrentChat, tooltip: 'Clear chat'),
-              IconButton(icon: Icon(Icons.settings, color: const Color(0xFF00FFD1)), onPressed: () => _showSettings()),
+              IconButton(
+                  icon: Icon(Icons.delete_outline,
+                      color: _textSecondaryColor.withOpacity(0.5), size: 18),
+                  onPressed: _messages.isEmpty ? null : _clearCurrentChat,
+                  tooltip: 'Clear chat'),
+              IconButton(
+                  icon: Icon(Icons.settings, color: const Color(0xFF00FFD1)),
+                  onPressed: () => _showSettings()),
             ],
           ),
         ),
@@ -744,219 +893,512 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildChatArea() {
-    if (_messages.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Container(width: 72, height: 72, decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
-        borderRadius: BorderRadius.circular(36)),
-      child: Center(child: Text('O', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)))),
-      const SizedBox(height: 16),
-      Text('Ask me anything — I am fully local and private', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: _fontSize + 3)),
-      const SizedBox(height: 6),
-      Text('Privacy-first AI agent with computer control', style: TextStyle(color: _hintTextColor, fontSize: _fontSize - 1)),
-      const SizedBox(height: 12),
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(width: 6, height: 6, decoration: BoxDecoration(color: _ollamaRunning ? Colors.green : Colors.orange, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text(_ollamaRunning ? 'Ollama Ready' : 'Ollama Starting...', style: TextStyle(color: _ollamaRunning ? Colors.green : Colors.orange, fontSize: 11)),
-      ]),
-    ]));
+    if (_messages.isEmpty)
+      return Center(
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+            Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
+                    borderRadius: BorderRadius.circular(36)),
+                child: Center(
+                    child: Text('O',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold)))),
+            const SizedBox(height: 16),
+            Text('Ask me anything -- I am fully local and private',
+                style: TextStyle(
+                    color: const Color(0xFF00FFD1), fontSize: _fontSize + 3)),
+            const SizedBox(height: 6),
+            Text('Privacy-first AI agent with computer control',
+                style: TextStyle(color: _hintTextColor, fontSize: _fontSize - 1)),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                      color: _ollamaRunning ? Colors.green : Colors.orange,
+                      shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text(
+                  _ollamaRunning ? 'Ollama Ready' : 'Ollama Starting...',
+                  style: TextStyle(
+                      color: _ollamaRunning ? Colors.green : Colors.orange,
+                      fontSize: 11)),
+            ]),
+          ]));
 
-    return ListView.builder(controller: _scrollController, padding: const EdgeInsets.all(16),
-      itemCount: _messages.length + (_isLoading ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _messages.length) return _buildTypingIndicator();
-        return _buildMessageBubble(_messages[index]);
-      },
-    );
+    return ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(16),
+        itemCount: _messages.length + (_isLoading ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _messages.length) return _buildTypingIndicator();
+          return _buildMessageBubble(_messages[index]);
+        });
   }
 
   Widget _buildMessageBubble(ChatMessage msg) {
-    return Align(alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          gradient: msg.isUser ? const LinearGradient(colors: [Color(0xFF0F4C75), Color(0xFF0F4C75)])
-              : LinearGradient(colors: [_surfaceColor, _surfaceColor]),
-          borderRadius: BorderRadius.circular(18),
-          border: msg.isUser ? null : Border.all(color: const Color(0xFF00FFD1).withOpacity(0.2))),
-        child: Text(msg.content, style: TextStyle(color: msg.isUser ? Colors.white : _textColor.withOpacity(0.9), fontSize: _fontSize))));
+    return Align(
+        alignment:
+            msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75),
+            decoration: BoxDecoration(
+                gradient: msg.isUser
+                    ? const LinearGradient(
+                        colors: [Color(0xFF0F4C75), Color(0xFF0F4C75)])
+                    : LinearGradient(
+                        colors: [_surfaceColor, _surfaceColor]),
+                borderRadius: BorderRadius.circular(18),
+                border: msg.isUser
+                    ? null
+                    : Border.all(
+                        color: const Color(0xFF00FFD1).withOpacity(0.2))),
+            child: Text(msg.content,
+                style: TextStyle(
+                    color: msg.isUser
+                        ? Colors.white
+                        : _textColor.withOpacity(0.9),
+                    fontSize: _fontSize))));
   }
 
   Widget _buildTypingIndicator() {
-    return Align(alignment: Alignment.centerLeft, child: Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(color: _surfaceColor, borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.2))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        _dot(), const SizedBox(width: 4), _dot(delayMs: 150), const SizedBox(width: 4), _dot(delayMs:300)])));
+    return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+                color: _surfaceColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                    color: const Color(0xFF00FFD1).withOpacity(0.2))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              _dot(),
+              const SizedBox(width: 4),
+              _dot(),
+              const SizedBox(width: 4),
+              _dot()
+            ])));
   }
 
-  Widget _dot({int delayMs = 0}) {
-    return TweenAnimationBuilder<double>(tween: Tween(begin: 0.3, end: 1.0),
-      duration: const Duration(milliseconds: 600),
-      builder: (context, value, _) => Opacity(opacity: value,
-        child: Container(width: 8, height: 8, decoration: BoxDecoration(color: const Color(0xFF00FFD1), borderRadius: BorderRadius.circular(4)))));
+  Widget _dot() {
+    return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.3, end: 1.0),
+        duration: const Duration(milliseconds: 600),
+        builder: (context, value, _) => Opacity(
+            opacity: value,
+            child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    color: const Color(0xFF00FFD1),
+                    borderRadius: BorderRadius.circular(4)))));
   }
 
   Widget _buildInputArea() {
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: _surfaceColor, border: Border(top: BorderSide(color: _borderColor))),
-      child: Row(children: [
-        Expanded(child: TextField(controller: _controller, style: TextStyle(color: _textColor, fontSize: _fontSize),
-          decoration: InputDecoration(hintText: 'Ask Ono anything... or type a command like "open Safari"',
-            hintStyle: TextStyle(color: _hintTextColor, fontSize: _fontSize),
-            filled: true, fillColor: _inputBgColor,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
-          onSubmitted: (_) => _sendMessage())),
-        const SizedBox(width: 8),
-        Container(decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]), borderRadius: BorderRadius.circular(28)),
-          child: IconButton(icon: _isLoading ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Icon(Icons.send, color: Colors.white), onPressed: _isLoading ? null : _sendMessage)),
-      ]));
+    return Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+            color: _surfaceColor,
+            border: Border(top: BorderSide(color: _borderColor))),
+        child: Row(children: [
+          Expanded(
+              child: TextField(
+                  controller: _controller,
+                  style: TextStyle(color: _textColor, fontSize: _fontSize),
+                  decoration: InputDecoration(
+                      hintText:
+                          'Ask Ono anything... or type a command like "open Safari"',
+                      hintStyle:
+                          TextStyle(color: _hintTextColor, fontSize: _fontSize),
+                      filled: true,
+                      fillColor: _inputBgColor,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12)),
+                  onSubmitted: (_) => _sendMessage())),
+          const SizedBox(width: 8),
+          Container(
+              decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
+                  borderRadius: BorderRadius.circular(28)),
+              child: IconButton(
+                  icon: _isLoading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : Icon(Icons.send, color: Colors.white),
+                  onPressed: _isLoading ? null : _sendMessage)),
+        ]));
   }
 
-  // ==================== SIDEBAR (Session History) ====================
+  // ==================== SIDEBAR ====================
 
   Widget _buildSidebar() {
-    return Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showSidebar = false),
-      child: Container(color: Colors.black54, child: Align(alignment: Alignment.centerLeft, child:
-        Container(width: 280, height: double.infinity, color: _surfaceColor,
-          child: Column(children: [
-            Container(padding: const EdgeInsets.all(16),
-              child: Row(children: [
-                Text('Chats', style: TextStyle(color: _textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                IconButton(icon: Icon(Icons.add_circle_outline, color: const Color(0xFF00FFD1)), onPressed: () { _newSession(); setState(() => _showSidebar = false); }),
-              ])),
-            Divider(color: _borderColor),
-            Expanded(child: _sessions.isEmpty
-                ? Center(child: Text('No chats yet', style: TextStyle(color: _textSecondaryColor)))
-                : ListView.builder(itemCount: _sessions.length, itemBuilder: (ctx, idx) {
-                    final s = _sessions[idx];
-                    final isActive = s.id == _currentSessionId;
-                    return ListTile(dense: true, selected: isActive,
-                      selectedTileColor: const Color(0xFF00FFD1).withOpacity(0.08),
-                      leading: Icon(Icons.chat_bubble_outline, size: 18, color: isActive ? const Color(0xFF00FFD1) : _textSecondaryColor),
-                      title: Text(s.title, style: TextStyle(color: _textColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(s.createdAt.substring(0, 16), style: TextStyle(color: _textSecondaryColor, fontSize: 10)),
-                      trailing: IconButton(icon: Icon(Icons.close, size: 14, color: _textSecondaryColor.withOpacity(0.5)), onPressed: () => _deleteSession(s.id!)),
-                      onTap: () { _switchSession(s.id!); setState(() => _showSidebar = false); });
-                  })),
-          ]))))));
+    return Positioned.fill(
+        child: GestureDetector(
+            onTap: () => setState(() => _showSidebar = false),
+            child: Container(
+                color: Colors.black54,
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                        width: 280,
+                        height: double.infinity,
+                        color: _surfaceColor,
+                        child: Column(children: [
+                          Container(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(children: [
+                                Text('Chats',
+                                    style: TextStyle(
+                                        color: _textColor,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                IconButton(
+                                    icon: Icon(Icons.add_circle_outline,
+                                        color: const Color(0xFF00FFD1)),
+                                    onPressed: () {
+                                      _newSession();
+                                      setState(() => _showSidebar = false);
+                                    }),
+                              ])),
+                          Divider(color: _borderColor),
+                          Expanded(
+                              child: _sessions.isEmpty
+                                  ? Center(
+                                      child: Text('No chats yet',
+                                          style: TextStyle(
+                                              color:
+                                                  _textSecondaryColor)))
+                                  : ListView.builder(
+                                      itemCount: _sessions.length,
+                                      itemBuilder: (ctx, idx) {
+                                        final s = _sessions[idx];
+                                        final isActive =
+                                            s.id == _currentSessionId;
+                                        return ListTile(
+                                            dense: true,
+                                            selected: isActive,
+                                            selectedTileColor:
+                                                const Color(0xFF00FFD1)
+                                                    .withOpacity(0.08),
+                                            leading: Icon(
+                                                Icons.chat_bubble_outline,
+                                                size: 18,
+                                                color: isActive
+                                                    ? const Color(0xFF00FFD1)
+                                                    : _textSecondaryColor),
+                                            title: Text(s.title,
+                                                style: TextStyle(
+                                                    color: _textColor,
+                                                    fontSize: 13),
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis),
+                                            subtitle: Text(
+                                                s.createdAt
+                                                    .substring(0, 16),
+                                                style: TextStyle(
+                                                    color:
+                                                        _textSecondaryColor,
+                                                    fontSize: 10)),
+                                            trailing: IconButton(
+                                                icon: Icon(Icons.close,
+                                                    size: 14,
+                                                    color: _textSecondaryColor
+                                                        .withOpacity(0.5)),
+                                                onPressed: () =>
+                                                    _deleteSession(
+                                                        s.id!)),
+                                            onTap: () {
+                                              _switchSession(s.id!);
+                                              setState(() =>
+                                                  _showSidebar = false);
+                                            });
+                                      })),
+                        ]))))));
   }
 
-  // ==================== SETTINGS PAGE ====================
+  // ==================== SETTINGS ====================
 
   void _showSettings() {
-    showModalBottomSheet(context: context, backgroundColor: _surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(builder: (context, setModalState) => SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+    showModalBottomSheet(
+        context: context,
+        backgroundColor: _surfaceColor,
+        shape: RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (context) => StatefulBuilder(
+                builder: (context, setModalState) => SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // General
+                          _sectionHeader('General'),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Icon(Icons.text_fields,
+                                color: _textSecondaryColor, size: 18),
+                            const SizedBox(width: 10),
+                            Text('Font Size',
+                                style: TextStyle(
+                                    color: _textColor, fontSize: 14)),
+                            const Spacer(),
+                            Text('${_fontSize.toInt()}px',
+                                style: TextStyle(
+                                    color: const Color(0xFF00FFD1),
+                                    fontSize: 13)),
+                          ]),
+                          Slider(
+                              value: _fontSize,
+                              min: 12,
+                              max: 22,
+                              divisions: 10,
+                              activeColor: const Color(0xFF00FFD1),
+                              inactiveColor:
+                                  _textSecondaryColor.withOpacity(0.2),
+                              onChanged: (v) async {
+                                setModalState(() => _fontSize = v);
+                                setState(() => _fontSize = v);
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                await prefs.setDouble('font_size', v);
+                              }),
+                          const SizedBox(height: 16),
 
-          // --- General ---
-          _sectionHeader('General'),
-          const SizedBox(height: 12),
+                          // Appearance
+                          _sectionHeader('Appearance'),
+                          const SizedBox(height: 12),
+                          ...[ThemeMode.dark, ThemeMode.light, ThemeMode.system]
+                              .map((tm) {
+                            final labels = {
+                              ThemeMode.dark: 'Dark',
+                              ThemeMode.light: 'Light',
+                              ThemeMode.system: 'System'
+                            };
+                            final icons = {
+                              ThemeMode.dark: Icons.dark_mode,
+                              ThemeMode.light: Icons.light_mode,
+                              ThemeMode.system: Icons.settings_brightness
+                            };
+                            final isSelected = _themeMode == tm;
+                            return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(icons[tm],
+                                    size: 20,
+                                    color: isSelected
+                                        ? const Color(0xFF00FFD1)
+                                        : _textSecondaryColor),
+                                title: Text(labels[tm] ?? '',
+                                    style: TextStyle(
+                                        color: _textColor, fontSize: 14)),
+                                trailing: isSelected
+                                    ? Icon(Icons.check,
+                                        color: const Color(0xFF00FFD1),
+                                        size: 18)
+                                    : null,
+                                onTap: () async {
+                                  setModalState(() => _themeMode = tm);
+                                  setState(() => _themeMode = tm);
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  await prefs.setInt(
+                                      'theme_mode', tm.index);
+                                });
+                          }),
+                          const SizedBox(height: 16),
 
-          // Font Size
-          Row(children: [
-            Icon(Icons.text_fields, color: _textSecondaryColor, size: 18),
-            const SizedBox(width: 10),
-            Text('Font Size', style: TextStyle(color: _textColor, fontSize: 14)),
-            const Spacer(),
-            Text('${_fontSize.toInt()}px', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 13)),
-          ]),
-          Slider(value: _fontSize, min: 12, max: 22, divisions: 10,
-            activeColor: const Color(0xFF00FFD1), inactiveColor: _textSecondaryColor.withOpacity(0.2),
-            onChanged: (v) async {
-              setModalState(() => _fontSize = v);
-              setState(() => _fontSize = v);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setDouble('font_size', v);
-            }),
-          const SizedBox(height: 16),
+                          // Model
+                          _sectionHeader('Model'),
+                          const SizedBox(height: 8),
+                          ..._allModels.map((model) {
+                            final isProModel = model['tier'] == 'pro';
+                            final isLocked = isProModel && !_isPro;
+                            final isSelected =
+                                _selectedModel == model['id'];
+                            return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                    isLocked
+                                        ? Icons.lock_outline
+                                        : Icons.check_circle_outline,
+                                    size: 20,
+                                    color: isSelected
+                                        ? const Color(0xFF00FFD1)
+                                        : (isLocked
+                                            ? Colors.white24
+                                            : _textSecondaryColor)),
+                                title: Row(children: [
+                                  Text(model['name'] ?? '',
+                                      style: TextStyle(
+                                          color: isLocked
+                                              ? Colors.white38
+                                              : _textColor,
+                                          fontSize: 14)),
+                                  if (isProModel) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                                colors: [
+                                                  Colors.amber,
+                                                  Colors.orange
+                                                ]),
+                                            borderRadius:
+                                                BorderRadius.circular(4)),
+                                        child: Text('PRO',
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 8))),
+                                  ],
+                                ]),
+                                trailing: isSelected
+                                    ? Text('Active',
+                                        style: TextStyle(
+                                            color: const Color(0xFF00FFD1),
+                                            fontSize: 12))
+                                    : null,
+                                onTap: isLocked
+                                    ? null
+                                    : () async {
+                                        final prefs =
+                                            await SharedPreferences
+                                                .getInstance();
+                                        await prefs.setString(
+                                            'selected_model',
+                                            model['id'] ?? '');
+                                        setState(() => _selectedModel =
+                                            model['id'] ?? 'qwen2.5:3b');
+                                        setModalState(() =>
+                                            _selectedModel =
+                                                model['id'] ??
+                                                    'qwen2.5:3b');
+                                      });
+                          }),
+                          const SizedBox(height: 16),
 
-          // --- Appearance ---
-          _sectionHeader('Appearance'),
-          const SizedBox(height: 12),
+                          // System
+                          _sectionHeader('System'),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                    color: _backendConnected
+                                        ? Colors.green
+                                        : Colors.red,
+                                    shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text(
+                                _backendConnected
+                                    ? 'Backend Connected'
+                                    : 'Backend Offline',
+                                style: TextStyle(
+                                    color: _backendConnected
+                                        ? Colors.green
+                                        : Colors.redAccent,
+                                    fontSize: 13)),
+                            const Spacer(),
+                            TextButton(
+                                onPressed: () async {
+                                  await _checkBackend();
+                                  setModalState(() {});
+                                },
+                                child: Text('Reconnect',
+                                    style: TextStyle(
+                                        color: const Color(0xFF00FFD1)))),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                    color: _ollamaRunning
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text(
+                                _ollamaRunning
+                                    ? 'Ollama Running'
+                                    : 'Ollama Not Detected',
+                                style: TextStyle(
+                                    color: _ollamaRunning
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    fontSize: 13)),
+                          ]),
+                          const SizedBox(height: 12),
 
-          // Theme Mode
-          ...[ThemeMode.dark, ThemeMode.light, ThemeMode.system].map((tm) {
-            final labels = {ThemeMode.dark: 'Dark', ThemeMode.light: 'Light', ThemeMode.system: 'System'};
-            final icons = {ThemeMode.dark: Icons.dark_mode, ThemeMode.light: Icons.light_mode, ThemeMode.system: Icons.settings_brightness};
-            final isSelected = _themeMode == tm;
-            return ListTile(dense: true, contentPadding: EdgeInsets.zero,
-              leading: Icon(icons[tm], size: 20, color: isSelected ? const Color(0xFF00FFD1) : _textSecondaryColor),
-              title: Text(labels[tm] ?? '', style: TextStyle(color: _textColor, fontSize: 14)),
-              trailing: isSelected ? Icon(Icons.check, color: const Color(0xFF00FFD1), size: 18) : null,
-              onTap: () async {
-                setModalState(() => _themeMode = tm);
-                setState(() => _themeMode = tm);
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setInt('theme_mode', tm.index);
-              });
-          }),
-          const SizedBox(height: 16),
-
-          // --- Model ---
-          _sectionHeader('Model'),
-          const SizedBox(height: 8),
-          ..._allModels.map((model) {
-            final isProModel = model['tier'] == 'pro';
-            final isLocked = isProModel && !_isPro;
-            final isSelected = _selectedModel == model['id'];
-            return ListTile(dense: true, contentPadding: EdgeInsets.zero,
-              leading: Icon(isLocked ? Icons.lock_outline : Icons.check_circle_outline, size: 20,
-                color: isSelected ? const Color(0xFF00FFD1) : (isLocked ? Colors.white24 : _textSecondaryColor)),
-              title: Row(children: [
-                Text(model['name'] ?? '', style: TextStyle(color: isLocked ? Colors.white38 : _textColor, fontSize: 14)),
-                if (isProModel) ...[
-                  const SizedBox(width: 6),
-                  Container(padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.amber, Colors.orange]), borderRadius: BorderRadius.circular(4)),
-                    child: Text('PRO', style: TextStyle(color: Colors.white, fontSize: 8))),
-                ],
-              ]),
-              trailing: isSelected ? Text('Active', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 12)) : null,
-              onTap: isLocked ? null : () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('selected_model', model['id'] ?? '');
-                setState(() => _selectedModel = model['id'] ?? 'qwen2.5:3b');
-                setModalState(() => _selectedModel = model['id'] ?? 'qwen2.5:3b');
-              },
-            );
-          }),
-          const SizedBox(height: 16),
-
-          // --- System Status ---
-          _sectionHeader('System'),
-          const SizedBox(height: 8),
-
-          // Backend status
-          Row(children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: _backendConnected ? Colors.green : Colors.red, shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Text(_backendConnected ? 'Backend Connected' : 'Backend Offline', style: TextStyle(color: _backendConnected ? Colors.green : Colors.redAccent, fontSize: 13)),
-            const Spacer(),
-            TextButton(onPressed: () async { await _checkBackend(); setModalState(() {}); }, child: Text('Reconnect', style: TextStyle(color: const Color(0xFF00FFD1)))),
-          ]),
-          const SizedBox(height: 8),
-
-          // Ollama status
-          Row(children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: _ollamaRunning ? Colors.green : Colors.orange, shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Text(_ollamaRunning ? 'Ollama Running' : 'Ollama Not Detected', style: TextStyle(color: _ollamaRunning ? Colors.green : Colors.orange, fontSize: 13)),
-          ]),
-          const SizedBox(height: 20),
-        ]),
-      )));
+                          // Version + Check Update
+                          Row(children: [
+                            Text('v$_currentVersion',
+                                style: TextStyle(
+                                    color: _textSecondaryColor,
+                                    fontSize: 12)),
+                            const Spacer(),
+                            TextButton(
+                                onPressed: () async {
+                                  final update = await checkForUpdate();
+                                  if (update == null) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(SnackBar(
+                                      content: Text('You are on the latest version'),
+                                      backgroundColor: Colors.green,
+                                    ));
+                                  } else {
+                                    _checkForUpdate();
+                                  }
+                                },
+                                child: Text('Check for Updates',
+                                    style: TextStyle(
+                                        color: const Color(0xFF00FFD1),
+                                        fontSize: 12))),
+                          ]),
+                          const SizedBox(height: 20),
+                        ]
+                    )
+                )
+            )
+        );
   }
 
   Widget _sectionHeader(String title) {
-    return Text(title, style: TextStyle(color: _textSecondaryColor, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5));
+    return Text(title,
+        style: TextStyle(
+            color: _textSecondaryColor,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5));
   }
 }

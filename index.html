@@ -133,7 +133,6 @@
             font-size: 14px;
         }
 
-        /* ===== CHANGELOG ===== */
         .changelog {
             margin-top: 40px;
             max-width: 580px;
@@ -187,20 +186,18 @@
             color: rgba(255,255,255,0.7);
             line-height: 1.7;
             padding: 3px 0;
-            padding-left: 18px;
+            padding-left: 14px;
             position: relative;
         }
 
         .changelog-list li::before {
-            content: '✦';
+            content: '\2014';
             position: absolute;
             left: 0;
             color: #00FFD1;
-            font-size: 11px;
         }
 
-        .changelog-list li.new { color: #fff; }
-        .changelog-list li.new::before { content: '🆕'; font-size: 12px; }
+        .changelog-list li.new { color: #fff; font-weight: 500; }
 
         .features {
             padding: 80px 20px;
@@ -233,11 +230,6 @@
 
         .feature-card:hover {
             border-color: rgba(0,255,209,0.3);
-        }
-
-        .feature-icon {
-            font-size: 40px;
-            margin-bottom: 16px;
         }
 
         .feature-card h3 {
@@ -342,7 +334,6 @@
 <body>
 
 <section class="hero">
-    <!-- Version Badge -->
     <div class="version-badge"><span class="dot"></span>Version 2.0.0 &mdash; June 7, 2026</div>
 
     <div class="logo">O</div>
@@ -356,35 +347,34 @@
     </a>
     <p class="platform-note">Requires macOS 14+ &bull; Apple Silicon &bull; Ollama auto-starts</p>
 
-    <!-- Install Warning -->
     <details style="margin-top: 12px; color: rgba(255,255,255,0.4); font-size: 13px; cursor: pointer;">
-        <summary>⚠️ First-time install: "Not Opened" warning?</summary>
+        <summary>First-time install: "Not Opened" warning?</summary>
         <p style="margin-top: 8px; max-width: 400px; line-height: 1.5;">
             Ono is not signed by Apple (yet). If you see "Ono Not Opened", click <strong>Done</strong>,
-            then go to <strong>System Settings → Privacy & Security</strong>, scroll down and click <strong>"Open Anyway"</strong>.
+            then go to <strong>System Settings &rarr; Privacy &amp; Security</strong>, scroll down and click <strong>"Open Anyway"</strong>.
         </p>
     </details>
 
-    <!-- Changelog -->
     <div class="changelog">
         <div class="changelog-toggle" onclick="this.nextElementSibling.classList.toggle('open')">
-            📋 What's New in v2.0.0
+            What's New in v2.0.0
         </div>
         <div class="changelog-content open">
-            <div class="changelog-version">v2.0.0 — Auto-Start, Memory & Themes</div>
+            <div class="changelog-version">v2.0.0 &mdash; Auto-Start, Memory &amp; Themes</div>
             <div class="changelog-date">June 7, 2026</div>
             <ul class="changelog-list">
-                <li class="new">🚀 Auto-start Ollama + Backend on launch — no terminal needed</li>
-                <li class="new">💾 Multi-session chat memory with SQLite persistence</li>
-                <li class="new">🌓 Dark / Light / System theme switcher in settings</li>
-                <li class="new">📝 Adjustable font size (12–22px) in settings</li>
-                <li class="new">📱 Session sidebar — create, switch, delete conversations</li>
-                <li class="new">🖥️ Computer control ready (backend endpoint)</li>
-                <li>🔒 App sandbox disabled for local process control</li>
-                <li>🐛 Fixed: Backend Offline status on first launch</li>
+                <li class="new">Auto-start Ollama + Backend on launch &mdash; no terminal needed</li>
+                <li class="new">Multi-session chat memory with SQLite persistence</li>
+                <li class="new">Dark / Light / System theme switcher in settings</li>
+                <li class="new">Adjustable font size (12&ndash;22px) in settings</li>
+                <li class="new">Session sidebar &mdash; create, switch, delete conversations</li>
+                <li class="new">Auto-update checker &mdash; notifies when new version available</li>
+                <li class="new">Computer control ready (backend endpoint)</li>
+                <li>App sandbox disabled for local process control</li>
+                <li>Fixed: Backend Offline status on first launch</li>
             </ul>
             
-            <div class="changelog-version" style="margin-top: 16px;">v1.1.0 — Pro Features</div>
+            <div class="changelog-version" style="margin-top: 16px;">v1.1.0 &mdash; Pro Features</div>
             <div class="changelog-date">June 6, 2026</div>
             <ul class="changelog-list">
                 <li>Pro feature gate (multi-model switching UI)</li>
@@ -392,7 +382,7 @@
                 <li>Redesigned settings page</li>
             </ul>
 
-            <div class="changelog-version" style="margin-top: 16px;">v1.0.0 — Initial Release</div>
+            <div class="changelog-version" style="margin-top: 16px;">v1.0.0 &mdash; Initial Release</div>
             <div class="changelog-date">June 6, 2026</div>
             <ul class="changelog-list">
                 <li>First macOS build with bundled backend</li>
@@ -411,35 +401,30 @@
             <p>All AI processing happens on your Mac. No data ever leaves your device. Zero cloud dependency.</p>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">⚡</div>
-            <h3>Instant & Offline</h3>
+            <h3>Instant &amp; Offline</h3>
             <p>Works without internet. Ollama runs local models (Qwen 2.5) for instant, private responses.</p>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">💾</div>
             <h3>Smart Memory</h3>
             <p>Multi-session SQLite database stores all conversations locally. Switch between chats instantly.</p>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">🎨</div>
-            <h3>Beautiful & Customizable</h3>
+            <h3>Beautiful &amp; Customizable</h3>
             <p>Dark/Light themes, adjustable fonts, clean interface. Built with Flutter for a native feel.</p>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">🔓</div>
             <h3>Open Source</h3>
             <p>Core features are AGPL v3 licensed. Audit the code, contribute, or fork it yourself.</p>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">🌐</div>
             <h3>Multi-Platform</h3>
-            <p>macOS today, iOS & Android coming soon. One codebase, every device.</p>
+            <p>macOS today, iOS &amp; Android coming soon. One codebase, every device.</p>
         </div>
     </div>
 </section>
 
 <section class="how-it-works">
-    <h2>How It Works</hAPI>
+    <h2>How It Works</h2>
     <div class="steps">
         <div class="step">
             <div class="step-num">1</div>
@@ -449,7 +434,7 @@
         <div class="step">
             <div class="step-num">2</div>
             <h3>Start Chatting</h3>
-            <p>Double-click the app. Everything launches behind the scenes — no terminal needed.</p>
+            <p>Double-click the app. Everything launches behind the scenes &mdash; no terminal needed.</p>
         </div>
         <div class="step">
             <div class="step-num">3</div>
@@ -461,11 +446,10 @@
 
 <footer class="footer">
     <p>Built by a student, for students.</p>
-    <div class="opensource">🔓 Open Core &bull; AGPL v3</div>
+    <div class="opensource">Open Core &bull; AGPL v3</div>
 </footer>
 
 <script>
-// Auto-open changelog on first visit
 if (!localStorage.getItem('ono_changelog_seen')) {
     document.querySelector('.changelog-content').classList.add('open');
     localStorage.setItem('ono_changelog_seen', '1');
