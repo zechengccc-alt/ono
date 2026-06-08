@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -241,11 +242,12 @@ class _LetterWidget extends StatelessWidget {
 final _darkTheme = ThemeData(
   brightness: Brightness.dark,
   primaryColor: const Color(0xFF00FFD1),
-  scaffoldBackgroundColor: const Color(0xFF0A0E1A),
+  scaffoldBackgroundColor: const Color(0xFF070B18),
   colorScheme: const ColorScheme.dark(
     primary: Color(0xFF00FFD1),
     secondary: Color(0xFF0F4C75),
-    surface: Color(0xFF111827),
+    surface: Color(0xFF0D1225),
+    surfaceContainerHighest: Color(0xFF141B33),
   ),
   useMaterial3: true,
 );
@@ -253,7 +255,7 @@ final _darkTheme = ThemeData(
 final _lightTheme = ThemeData(
   brightness: Brightness.light,
   primaryColor: const Color(0xFF0F4C75),
-  scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+  scaffoldBackgroundColor: const Color(0xFFF0F4FA),
   colorScheme: const ColorScheme.light(
     primary: Color(0xFF0F4C75),
     secondary: Color(0xFF00FFD1),
@@ -271,6 +273,19 @@ class OkoApp extends StatefulWidget {
 
 class _OkoAppState extends State<OkoApp> {
   bool _showSplash = true;
+  ThemeMode _themeMode = ThemeMode.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tm = prefs.getInt('theme_mode') ?? 0;
+    if (mounted) setState(() => _themeMode = ThemeMode.values[tm]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +294,7 @@ class _OkoAppState extends State<OkoApp> {
       debugShowCheckedModeBanner: false,
       theme: _darkTheme,
       darkTheme: _darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: _themeMode,
       home: _showSplash
           ? SplashScreen(onDone: () => setState(() => _showSplash = false))
           : const ChatPage(),
@@ -516,6 +531,26 @@ class _ChatPageState extends State<ChatPage> {
   ThemeMode _themeMode = ThemeMode.dark;
   bool _showSidebar = false;
 
+  // Privacy permissions
+  bool _permMessages = false;
+  bool _permGmail = false;
+  bool _permFiles = false;
+  bool _permCamera = false;
+  bool _permContacts = false;
+  bool _permCalendar = false;
+  bool _permClipboard = true;
+  bool _permTerminal = false;
+  bool _permBrowser = false;
+
+  // Language & username
+  String _language = 'en';
+  String _username = 'User';
+
+  // Task progress card state
+  bool _showTaskCard = false;
+  String _taskTitle = '';
+  List<_TaskStep> _taskSteps = [];
+
   // All available models
   static const List<Map<String, String>> _allModels = [
     {'id': 'qwen2.5:3b', 'name': 'qwen2.5:3b', 'tier': 'free'},
@@ -542,11 +577,22 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isPro = prefs.getBool('is_pro') ?? false;  // Default free, upgrade to unlock
+      _isPro = prefs.getBool('is_pro') ?? false;
       _selectedModel = prefs.getString('selected_model') ?? 'qwen2.5:3b';
       _fontSize = prefs.getDouble('font_size') ?? 15.0;
       final tm = prefs.getInt('theme_mode') ?? 0;
       _themeMode = ThemeMode.values[tm];
+      _language = prefs.getString('language') ?? 'en';
+      _username = prefs.getString('username') ?? 'User';
+      _permMessages = prefs.getBool('perm_messages') ?? false;
+      _permGmail = prefs.getBool('perm_gmail') ?? false;
+      _permFiles = prefs.getBool('perm_files') ?? false;
+      _permCamera = prefs.getBool('perm_camera') ?? false;
+      _permContacts = prefs.getBool('perm_contacts') ?? false;
+      _permCalendar = prefs.getBool('perm_calendar') ?? false;
+      _permClipboard = prefs.getBool('perm_clipboard') ?? true;
+      _permTerminal = prefs.getBool('perm_terminal') ?? false;
+      _permBrowser = prefs.getBool('perm_browser') ?? false;
     });
   }
 
@@ -856,10 +902,10 @@ class _ChatPageState extends State<ChatPage> {
 
   Color get _bgColor =>
       _themeMode == ThemeMode.dark
-          ? const Color(0xFF0A0E1A)
-          : const Color(0xFFF5F7FA);
+          ? const Color(0xFF070B18)
+          : const Color(0xFFF0F4FA);
   Color get _surfaceColor =>
-      _themeMode == ThemeMode.dark ? const Color(0xFF111827) : Colors.white;
+      _themeMode == ThemeMode.dark ? const Color(0xFF0D1225) : Colors.white;
   Color get _inputBgColor =>
       _themeMode == ThemeMode.dark
           ? const Color(0xFF0A0E1A)
@@ -875,83 +921,19 @@ class _ChatPageState extends State<ChatPage> {
   Color get _hintTextColor =>
       _themeMode == ThemeMode.dark ? Colors.white38 : const Color(0xFF9CA3AF);
 
+  ui.ImageFilter get _uiBlur => ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20);
+
   @override
   Widget build(BuildContext context) {
     return Theme(
       data: _themeMode == ThemeMode.dark ? _darkTheme : _lightTheme,
       child: Scaffold(
         backgroundColor: _bgColor,
-        appBar: AppBar(
-          backgroundColor: _bgColor,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.menu, color: const Color(0xFF00FFD1)),
-            onPressed: () => setState(() => _showSidebar = !_showSidebar),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                    child: Text('O',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14))),
-              ),
-              const SizedBox(width: 8),
-              Text('Oko',
-                  style: TextStyle(
-                      color: const Color(0xFF00FFD1),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold)),
-              if (_isPro) ...[
-                const SizedBox(width: 4),
-                Container(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                        gradient:
-                            LinearGradient(colors: [Colors.amber, Colors.orange]),
-                        borderRadius: BorderRadius.circular(6)),
-                    child: Text('PRO',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold))),
-              ],
-              const Spacer(),
-              Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                      color: _backendConnected ? Colors.green : Colors.red,
-                      shape: BoxShape.circle)),
-              const SizedBox(width: 4),
-              Text(
-                  _backendConnected ? 'Connected' : 'Offline',
-                  style: TextStyle(
-                      color: _backendConnected ? Colors.green : Colors.red,
-                      fontSize: 11)),
-              const SizedBox(width: 6),
-              IconButton(
-                  icon: Icon(Icons.delete_outline,
-                      color: _textSecondaryColor.withOpacity(0.5), size: 18),
-                  onPressed: _messages.isEmpty ? null : _clearCurrentChat,
-                  tooltip: 'Clear chat'),
-              IconButton(
-                  icon: Icon(Icons.settings, color: const Color(0xFF00FFD1)),
-                  onPressed: () => _showSettings()),
-            ],
-          ),
-        ),
+        appBar: _buildAppBar(),
         body: Stack(children: [
+          if (_themeMode == ThemeMode.dark) _buildAuroraBackground(),
           Column(children: [
+            if (_showTaskCard) _buildTaskCard(),
             Expanded(child: _buildChatArea()),
             _buildInputArea(),
           ]),
@@ -960,6 +942,110 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.menu, color: const Color(0xFF00FFD1)),
+        onPressed: () => setState(() => _showSidebar = !_showSidebar),
+      ),
+      title: Row(
+        children: [
+          Container(
+            width: 28, height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)]),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.3), blurRadius: 12)],
+            ),
+            child: Center(child: Text('O', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+          ),
+          const SizedBox(width: 8),
+          Text('Oko', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 20, fontWeight: FontWeight.bold)),
+          if (_isPro) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.amber, Colors.orange]), borderRadius: BorderRadius.circular(6)),
+              child: Text('PRO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+            ),
+          ],
+          const Spacer(),
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: _backendConnected ? Colors.green : Colors.red, shape: BoxShape.circle)),
+          const SizedBox(width: 4),
+          Text(_backendConnected ? 'Connected' : 'Offline', style: TextStyle(color: _backendConnected ? Colors.green : Colors.red, fontSize: 11)),
+          const SizedBox(width: 6),
+          IconButton(icon: Icon(Icons.delete_outline, color: _textSecondaryColor.withOpacity(0.5), size: 18), onPressed: _messages.isEmpty ? null : _clearCurrentChat),
+          IconButton(icon: Icon(Icons.settings, color: const Color(0xFF00FFD1)), onPressed: () => _showSettings()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAuroraBackground() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(-0.3 + (DateTime.now().millisecond % 10000) / 10000 * 0.6, -0.2 + (DateTime.now().second % 8) / 8 * 0.4),
+              radius: 0.9,
+              colors: [
+                const Color(0xFF0F4C75).withOpacity(0.10),
+                const Color(0xFF00FFD1).withOpacity(0.05),
+                const Color(0xFF7B2FF7).withOpacity(0.07),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.3, 0.6, 1.0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceColor.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(children: [
+            Icon(Icons.auto_awesome, color: const Color(0xFF00FFD1), size: 16),
+            const SizedBox(width: 8),
+            Text(_taskTitle, style: TextStyle(color: _textColor, fontSize: 13, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            GestureDetector(onTap: () => setState(() => _showTaskCard = false), child: Icon(Icons.close, color: _textSecondaryColor, size: 16)),
+          ]),
+          const SizedBox(height: 10),
+          ..._taskSteps.map((step) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              if (step.status == _TaskStatus.done)
+                Icon(Icons.check_circle, color: const Color(0xFF00FFD1), size: 16)
+              else if (step.status == _TaskStatus.running)
+                SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: const Color(0xFF00FFD1), strokeWidth: 2))
+              else
+                Icon(Icons.circle_outlined, color: _textSecondaryColor, size: 16),
+              const SizedBox(width: 10),
+              Text(step.label, style: TextStyle(color: step.status == _TaskStatus.pending ? _textSecondaryColor : _textColor, fontSize: 12)),
+            ]),
+          )),
+        ],
+      ),
+    );
+  }
+
+
 
   Widget _buildChatArea() {
     if (_messages.isEmpty)
@@ -1010,8 +1096,99 @@ class _ChatPageState extends State<ChatPage> {
         itemCount: _messages.length + (_isLoading ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _messages.length) return _buildTypingIndicator();
-          return _buildMessageBubble(_messages[index]);
+          final msg = _messages[index];
+          if (!msg.isUser && _looksLikeTable(msg.content)) return _buildTablePreview(msg);
+          return _buildMessageBubble(msg);
         });
+  }
+
+  bool _looksLikeTable(String content) {
+    final lines = content.split('\n');
+    int tableLines = 0;
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.contains('|') || trimmed.split(',').length >= 3) tableLines++;
+    }
+    return tableLines >= 2;
+  }
+
+  Widget _buildTablePreview(ChatMessage msg) {
+    final lines = msg.content.split('\n');
+    final rows = <List<String>>[];
+    for (final line in lines) {
+      final t = line.trim();
+      if (t.contains('|')) {
+        rows.add(t.split('|').map((c) => c.trim()).toList());
+      } else if (t.split(',').length >= 3) {
+        rows.add(t.split(',').map((c) => c.trim()).toList());
+      }
+    }
+    if (rows.length < 2) return _buildMessageBubble(msg);
+    final display = rows.take(6).toList();
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        decoration: BoxDecoration(
+          color: _surfaceColor.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [const Color(0xFF0F4C75).withOpacity(0.4), const Color(0xFF00FFD1).withOpacity(0.2)]),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(children: [
+                Icon(Icons.table_chart, color: const Color(0xFF00FFD1), size: 16),
+                const SizedBox(width: 8),
+                Text('Data Preview', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Table(
+                columnWidths: {for (int i = 0; i < display[0].length; i++) i: const IntrinsicColumnWidth()},
+                border: TableBorder(horizontalInside: BorderSide(color: _borderColor, width: 0.5)),
+                children: display.asMap().entries.map((entry) {
+                  final isH = entry.key == 0;
+                  return TableRow(
+                    decoration: isH ? BoxDecoration(color: const Color(0xFF00FFD1).withOpacity(0.06)) : null,
+                    children: entry.value.map((cell) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Text(cell, style: TextStyle(color: isH ? const Color(0xFF00FFD1) : _textColor, fontSize: 11, fontWeight: isH ? FontWeight.w600 : FontWeight.normal)),
+                    )).toList(),
+                  );
+                }).toList(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: Icon(Icons.open_in_new, size: 16),
+                  label: Text('Open Full Table'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00FFD1), foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildMessageBubble(ChatMessage msg) {
@@ -1125,409 +1302,341 @@ class _ChatPageState extends State<ChatPage> {
 
   Widget _buildSidebar() {
     return Positioned.fill(
-        child: GestureDetector(
-            onTap: () => setState(() => _showSidebar = false),
-            child: Container(
-                color: Colors.black54,
-                child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                        width: 280,
-                        height: double.infinity,
-                        color: _surfaceColor,
-                        child: Column(children: [
-                          Container(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(children: [
-                                Text('Chats',
-                                    style: TextStyle(
-                                        color: _textColor,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold)),
-                                const Spacer(),
-                                IconButton(
-                                    icon: Icon(Icons.add_circle_outline,
-                                        color: const Color(0xFF00FFD1)),
-                                    onPressed: () {
-                                      _newSession();
-                                      setState(() => _showSidebar = false);
-                                    }),
-                              ])),
-                          Divider(color: _borderColor),
-                          Expanded(
-                              child: _sessions.isEmpty
-                                  ? Center(
-                                      child: Text('No chats yet',
-                                          style: TextStyle(
-                                              color:
-                                                  _textSecondaryColor)))
-                                  : ListView.builder(
-                                      itemCount: _sessions.length,
-                                      itemBuilder: (ctx, idx) {
-                                        final s = _sessions[idx];
-                                        final isActive =
-                                            s.id == _currentSessionId;
-                                        return ListTile(
-                                            dense: true,
-                                            selected: isActive,
-                                            selectedTileColor:
-                                                const Color(0xFF00FFD1)
-                                                    .withOpacity(0.08),
-                                            leading: Icon(
-                                                Icons.chat_bubble_outline,
-                                                size: 18,
-                                                color: isActive
-                                                    ? const Color(0xFF00FFD1)
-                                                    : _textSecondaryColor),
-                                            title: Text(s.title,
-                                                style: TextStyle(
-                                                    color: _textColor,
-                                                    fontSize: 13),
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis),
-                                            subtitle: Text(
-                                                s.createdAt
-                                                    .substring(0, 16),
-                                                style: TextStyle(
-                                                    color:
-                                                        _textSecondaryColor,
-                                                    fontSize: 10)),
-                                            trailing: IconButton(
-                                                icon: Icon(Icons.close,
-                                                    size: 14,
-                                                    color: _textSecondaryColor
-                                                        .withOpacity(0.5)),
-                                                onPressed: () =>
-                                                    _deleteSession(
-                                                        s.id!)),
-                                            onTap: () {
-                                              _switchSession(s.id!);
-                                              setState(() =>
-                                                  _showSidebar = false);
-                                            });
-                                      })),
-                        ]))))));
+      child: GestureDetector(
+        onTap: () => setState(() => _showSidebar = false),
+        child: Container(
+          color: Colors.black54,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(topRight: Radius.circular(20), bottomRight: Radius.circular(20)),
+              child: BackdropFilter(
+                filter: _uiBlur,
+                child: Container(
+                  width: 280,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _surfaceColor.withOpacity(0.75),
+                    borderRadius: const BorderRadius.only(topRight: Radius.circular(20), bottomRight: Radius.circular(20)),
+                    border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.12)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 30)],
+                  ),
+                  child: Column(children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(children: [
+                        Text('Chats', style: TextStyle(color: _textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(Icons.add_circle_outline, color: const Color(0xFF00FFD1)),
+                          onPressed: () { _newSession(); setState(() => _showSidebar = false); },
+                        ),
+                      ]),
+                    ),
+                    Divider(color: _borderColor, height: 1),
+                    Expanded(
+                      child: _sessions.isEmpty
+                          ? Center(child: Text('No chats yet', style: TextStyle(color: _textSecondaryColor)))
+                          : ListView.builder(
+                              itemCount: _sessions.length,
+                              itemBuilder: (ctx, idx) {
+                                final s = _sessions[idx];
+                                final isActive = s.id == _currentSessionId;
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: isActive
+                                      ? BoxDecoration(
+                                          gradient: LinearGradient(colors: [const Color(0xFF00FFD1).withOpacity(0.12), const Color(0xFF0F4C75).withOpacity(0.08)]),
+                                          borderRadius: BorderRadius.circular(12),
+                                        )
+                                      : null,
+                                  child: ListTile(
+                                    dense: true,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    selected: isActive,
+                                    selectedTileColor: Colors.transparent,
+                                    leading: Icon(Icons.chat_bubble_outline, size: 18, color: isActive ? const Color(0xFF00FFD1) : _textSecondaryColor),
+                                    title: Text(s.title, style: TextStyle(color: _textColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    subtitle: Text(s.createdAt.substring(0, 16), style: TextStyle(color: _textSecondaryColor, fontSize: 10)),
+                                    trailing: IconButton(icon: Icon(Icons.close, size: 14, color: _textSecondaryColor.withOpacity(0.5)), onPressed: () => _deleteSession(s.id!)),
+                                    onTap: () { _switchSession(s.id!); setState(() => _showSidebar = false); },
+                                  ),
+                                );
+                              }),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
+
 
   // ==================== SETTINGS ====================
 
   void _showSettings() {
     showModalBottomSheet(
-        context: context,
-        backgroundColor: _surfaceColor,
-        shape: RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (context) => StatefulBuilder(
-                builder: (context, setModalState) => SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // General
-                          _sectionHeader('General'),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            Icon(Icons.text_fields,
-                                color: _textSecondaryColor, size: 18),
-                            const SizedBox(width: 10),
-                            Text('Font Size',
-                                style: TextStyle(
-                                    color: _textColor, fontSize: 14)),
-                            const Spacer(),
-                            Text('${_fontSize.toInt()}px',
-                                style: TextStyle(
-                                    color: const Color(0xFF00FFD1),
-                                    fontSize: 13)),
-                          ]),
-                          Slider(
-                              value: _fontSize,
-                              min: 12,
-                              max: 22,
-                              divisions: 10,
-                              activeColor: const Color(0xFF00FFD1),
-                              inactiveColor:
-                                  _textSecondaryColor.withOpacity(0.2),
-                              onChanged: _isPro
-                                  ? (v) async {
-                                      setModalState(() => _fontSize = v);
-                                      setState(() => _fontSize = v);
-                                      final prefs =
-                                          await SharedPreferences.getInstance();
-                                      await prefs.setDouble('font_size', v);
-                                    }
-                                  : null),
-                          if (!_isPro)
-                            Text('Upgrade to Pro to customize font size',
-                                style: TextStyle(
-                                    color: Colors.amber.withOpacity(0.8),
-                                    fontSize: 11)),
-                          const SizedBox(height: 16),
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          decoration: BoxDecoration(
+            color: _surfaceColor.withOpacity(0.92),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.1)),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: BackdropFilter(
+              filter: _uiBlur,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: _textSecondaryColor.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      Icon(Icons.tune, color: const Color(0xFF00FFD1), size: 22),
+                      const SizedBox(width: 10),
+                      Text('Settings', style: TextStyle(color: _textColor, fontSize: 22, fontWeight: FontWeight.w700)),
+                    ]),
+                    const SizedBox(height: 20),
 
-                          // Appearance
-                          _sectionHeader('Appearance'),
-                          const SizedBox(height: 12),
-                          ...[ThemeMode.dark, ThemeMode.light, ThemeMode.system]
-                              .map((tm) {
-                            final labels = {
-                              ThemeMode.dark: 'Dark',
-                              ThemeMode.light: 'Light',
-                              ThemeMode.system: 'System'
-                            };
-                            final icons = {
-                              ThemeMode.dark: Icons.dark_mode,
-                              ThemeMode.light: Icons.light_mode,
-                              ThemeMode.system: Icons.settings_brightness
-                            };
-                            final isSelected = _themeMode == tm;
-                            return ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(icons[tm],
-                                    size: 20,
-                                    color: isSelected
-                                        ? const Color(0xFF00FFD1)
-                                        : _textSecondaryColor),
-                                title: Text(labels[tm] ?? '',
-                                    style: TextStyle(
-                                        color: _textColor, fontSize: 14)),
-                                trailing: isSelected
-                                    ? Icon(Icons.check,
-                                        color: const Color(0xFF00FFD1),
-                                        size: 18)
-                                    : null,
-                                onTap: _isPro
-                                    ? () async {
-                                        setModalState(() => _themeMode = tm);
-                                        setState(() => _themeMode = tm);
-                                        final prefs =
-                                            await SharedPreferences.getInstance();
-                                        await prefs.setInt(
-                                            'theme_mode', tm.index);
-                                      }
-                                    : null);
-                          }),
-                          if (!_isPro)
-                            Text('Upgrade to Pro to customize themes',
-                                style: TextStyle(
-                                    color: Colors.amber.withOpacity(0.8),
-                                    fontSize: 11)),
-                          const SizedBox(height: 16),
+                    // Profile
+                    _sCard('Profile', Icons.person, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Row(children: [
+                          Icon(Icons.badge, size: 18, color: _textSecondaryColor),
+                          const SizedBox(width: 12),
+                          Text('Username', style: TextStyle(color: _textColor, fontSize: 14)),
+                          const Spacer(),
+                          SizedBox(width: 150, child: TextField(
+                            textAlign: TextAlign.end,
+                            style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Enter name',
+                              hintStyle: TextStyle(color: _hintTextColor, fontSize: 13),
+                              border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true,
+                            ),
+                            controller: TextEditingController(text: _username),
+                            onChanged: (v) async { setState(() => _username = v); final p = await SharedPreferences.getInstance(); await p.setString('username', v); },
+                          )),
+                        ]),
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
 
-                          // Pro Upgrade
-                          if (!_isPro) ...[
-                            _sectionHeader('Pro'),
-                            const SizedBox(height: 8),
-                            Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                        colors: [
-                                          Colors.amber.withOpacity(0.15),
-                                          Colors.orange.withOpacity(0.1)
-                                        ]),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                        color: Colors.amber.withOpacity(0.3))),
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(children: [
-                                        Icon(Icons.workspace_premium,
-                                            color: Colors.amber, size: 20),
-                                        const SizedBox(width: 8),
-                                        Text('Upgrade to Pro',
-                                            style: TextStyle(
-                                                color: Colors.amber,
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w600)),
-                                      ]),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                          'Unlock all AI models, customize themes, and adjust font sizes.',
-                                          style: TextStyle(
-                                              color: _textSecondaryColor,
-                                              fontSize: 12)),
-                                      const SizedBox(height: 12),
-                                      SizedBox(
-                                          width: double.infinity,
-                                          child: ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.amber,
-                                                  foregroundColor: Colors.black,
-                                                  shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8))),
-                                              onPressed: () =>
-                                                  _showProUpgradeDialog(
-                                                      context),
-                                              child: Text('Upgrade Now'))),
-                                    ])),
-                            const SizedBox(height: 16),
-                          ],
+                    // Language
+                    _sCard('Language', Icons.translate, children: [
+                      ...['en', 'zh', 'es'].map((lang) {
+                        final labels = {'en': 'English', 'zh': '中文', 'es': 'Español'};
+                        final flags = {'en': '🇺🇸', 'zh': '🇨🇳', 'es': '🇪🇸'};
+                        final sel = _language == lang;
+                        return _sRow(label: '${flags[lang]}  ${labels[lang]}',
+                          trailing: sel ? Icon(Icons.check_circle, color: const Color(0xFF00FFD1), size: 20) : const SizedBox(width: 20),
+                          selected: sel,
+                          onTap: () async { setState(() => _language = lang); setModalState(() {}); final p = await SharedPreferences.getInstance(); await p.setString('language', lang); },
+                        );
+                      }),
+                    ]),
+                    const SizedBox(height: 16),
 
-                          // Model
-                          _sectionHeader('Model'),
-                          const SizedBox(height: 8),
-                          ..._allModels.map((model) {
-                            final isProModel = model['tier'] == 'pro';
-                            final isLocked = isProModel && !_isPro;
-                            final isSelected =
-                                _selectedModel == model['id'];
-                            return ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                    isLocked
-                                        ? Icons.lock_outline
-                                        : Icons.check_circle_outline,
-                                    size: 20,
-                                    color: isSelected
-                                        ? const Color(0xFF00FFD1)
-                                        : (isLocked
-                                            ? Colors.white24
-                                            : _textSecondaryColor)),
-                                title: Row(children: [
-                                  Text(model['name'] ?? '',
-                                      style: TextStyle(
-                                          color: isLocked
-                                              ? Colors.white38
-                                              : _textColor,
-                                          fontSize: 14)),
-                                  if (isProModel) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 4, vertical: 1),
-                                        decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                                colors: [
-                                                  Colors.amber,
-                                                  Colors.orange
-                                                ]),
-                                            borderRadius:
-                                                BorderRadius.circular(4)),
-                                        child: Text('PRO',
-                                            style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 8))),
-                                  ],
-                                ]),
-                                trailing: isSelected
-                                    ? Text('Active',
-                                        style: TextStyle(
-                                            color: const Color(0xFF00FFD1),
-                                            fontSize: 12))
-                                    : null,
-                                onTap: isLocked
-                                    ? null
-                                    : () async {
-                                        final prefs =
-                                            await SharedPreferences
-                                                .getInstance();
-                                        await prefs.setString(
-                                            'selected_model',
-                                            model['id'] ?? '');
-                                        setState(() => _selectedModel =
-                                            model['id'] ?? 'qwen2.5:3b');
-                                        setModalState(() =>
-                                            _selectedModel =
-                                                model['id'] ??
-                                                    'qwen2.5:3b');
-                                      });
-                          }),
-                          const SizedBox(height: 16),
+                    // Privacy & Permissions
+                    _sCard('Privacy & Permissions', Icons.shield, children: [
+                      _permSwitch('Messages (SMS/iMessage)', Icons.message, _permMessages, (v) => setState(() => _permMessages = v), 'perm_messages'),
+                      _permSwitch('Gmail Access', Icons.email, _permGmail, (v) => setState(() => _permGmail = v), 'perm_gmail'),
+                      _permSwitch('File System', Icons.folder_open, _permFiles, (v) => setState(() => _permFiles = v), 'perm_files'),
+                      _permSwitch('Camera', Icons.camera_alt, _permCamera, (v) => setState(() => _permCamera = v), 'perm_camera'),
+                      _permSwitch('Contacts', Icons.contacts, _permContacts, (v) => setState(() => _permContacts = v), 'perm_contacts'),
+                      _permSwitch('Calendar', Icons.calendar_today, _permCalendar, (v) => setState(() => _permCalendar = v), 'perm_calendar'),
+                      _permSwitch('Clipboard', Icons.content_paste, _permClipboard, (v) => setState(() => _permClipboard = v), 'perm_clipboard'),
+                      _permSwitch('Terminal Access', Icons.terminal, _permTerminal, (v) => setState(() => _permTerminal = v), 'perm_terminal'),
+                      _permSwitch('Browser Control', Icons.language, _permBrowser, (v) => setState(() => _permBrowser = v), 'perm_browser'),
+                    ]),
+                    const SizedBox(height: 16),
 
-                          // System
-                          _sectionHeader('System'),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                    color: _backendConnected
-                                        ? Colors.green
-                                        : Colors.red,
-                                    shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text(
-                                _backendConnected
-                                    ? 'Backend Connected'
-                                    : 'Backend Offline',
-                                style: TextStyle(
-                                    color: _backendConnected
-                                        ? Colors.green
-                                        : Colors.redAccent,
-                                    fontSize: 13)),
-                            const Spacer(),
-                            TextButton(
-                                onPressed: () async {
-                                  await _checkBackend();
-                                  setModalState(() {});
-                                },
-                                child: Text('Reconnect',
-                                    style: TextStyle(
-                                        color: const Color(0xFF00FFD1)))),
-                          ]),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                    color: _ollamaRunning
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text(
-                                _ollamaRunning
-                                    ? 'Ollama Running'
-                                    : 'Ollama Not Detected',
-                                style: TextStyle(
-                                    color: _ollamaRunning
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    fontSize: 13)),
-                          ]),
-                          const SizedBox(height: 12),
+                    // General
+                    _sCard('General', Icons.tune, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Row(children: [
+                          Icon(Icons.text_fields, size: 18, color: _textSecondaryColor),
+                          const SizedBox(width: 12),
+                          Text('Font Size', style: TextStyle(color: _textColor, fontSize: 14)),
+                          const Spacer(),
+                          Text('${_fontSize.toInt()}px', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 13)),
+                        ]),
+                      ),
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Slider(
+                        value: _fontSize, min: 12, max: 22, divisions: 10,
+                        activeColor: const Color(0xFF00FFD1),
+                        onChanged: _isPro ? (v) async {
+                          setModalState(() => _fontSize = v);
+                          setState(() => _fontSize = v);
+                          final p = await SharedPreferences.getInstance();
+                          await p.setDouble('font_size', v);
+                        } : null,
+                      )),
+                      if (!_isPro) Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Text('Upgrade to Pro to customize font size', style: TextStyle(color: Colors.amber.withOpacity(0.8), fontSize: 11))),
+                      const SizedBox(height: 8),
+                      ...[ThemeMode.dark, ThemeMode.light, ThemeMode.system].map((tm) {
+                        final labels = {ThemeMode.dark: 'Dark', ThemeMode.light: 'Light', ThemeMode.system: 'System'};
+                        final icons = {ThemeMode.dark: Icons.dark_mode, ThemeMode.light: Icons.light_mode, ThemeMode.system: Icons.settings_brightness};
+                        return _sRow(label: labels[tm] ?? '', icon: icons[tm],
+                          trailing: _themeMode == tm ? Icon(Icons.check, color: const Color(0xFF00FFD1), size: 18) : const SizedBox(width: 18),
+                          selected: _themeMode == tm,
+                          onTap: () async { setModalState(() {}); setState(() => _themeMode = tm); final p = await SharedPreferences.getInstance(); await p.setInt('theme_mode', tm.index); },
+                        );
+                      }),
+                    ]),
+                    const SizedBox(height: 16),
 
-                          // Version + Check Update
-                          Row(children: [
-                            Text('v$_currentVersion',
-                                style: TextStyle(
-                                    color: _textSecondaryColor,
-                                    fontSize: 12)),
-                            const Spacer(),
-                            TextButton(
-                                onPressed: () async {
-                                  final update = await checkForUpdate();
-                                  if (update == null) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(SnackBar(
-                                      content: Text('You are on the latest version'),
-                                      backgroundColor: Colors.green,
-                                    ));
-                                  } else {
-                                    _checkForUpdate();
-                                  }
-                                },
-                                child: Text('Check for Updates',
-                                    style: TextStyle(
-                                        color: const Color(0xFF00FFD1),
-                                        fontSize: 12))),
-                          ]),
-                          const SizedBox(height: 20),
-                        ]
-                    )
-                )
-            )
-        );
+                    // Pro
+                    if (!_isPro) _sCard('Pro', Icons.workspace_premium, children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [Colors.amber.withOpacity(0.15), Colors.orange.withOpacity(0.1)]),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        ),
+                        child: Column(children: [
+                          Text('Unlock all AI models, custom themes, and advanced permissions.', style: TextStyle(color: _textSecondaryColor, fontSize: 12)),
+                          const SizedBox(height: 10),
+                          SizedBox(width: double.infinity, child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                            onPressed: () => _showProUpgradeDialog(context),
+                            child: Text('Upgrade Now'),
+                          )),
+                        ]),
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
+
+                    // Model
+                    _sCard('Model', Icons.psychology, children: [
+                      ..._allModels.map((model) {
+                        final isProModel = model['tier'] == 'pro';
+                        final isLocked = isProModel && !_isPro;
+                        final isSelected = _selectedModel == model['id'];
+                        return _sRow(label: '${model['name']}${isProModel ? '  PRO' : ''}',
+                          icon: isLocked ? Icons.lock_outline : Icons.check_circle_outline,
+                          iconColor: isSelected ? const Color(0xFF00FFD1) : (isLocked ? Colors.white24 : _textSecondaryColor),
+                          trailing: isSelected ? Text('Active', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 12)) : const SizedBox(width: 40),
+                          selected: isSelected,
+                          locked: isLocked,
+                          onTap: isLocked ? null : () async {
+                            final p = await SharedPreferences.getInstance();
+                            await p.setString('selected_model', model['id'] ?? '');
+                            setState(() => _selectedModel = model['id'] ?? 'qwen2.5:3b');
+                            setModalState(() {});
+                          },
+                        );
+                      }),
+                    ]),
+                    const SizedBox(height: 16),
+
+                    // System
+                    _sCard('System', Icons.info_outline, children: [
+                      _sRow(label: _backendConnected ? 'Backend Connected' : 'Backend Offline',
+                        labelColor: _backendConnected ? Colors.green : Colors.redAccent,
+                        icon: _backendConnected ? Icons.cloud_done : Icons.cloud_off,
+                        iconColor: _backendConnected ? Colors.green : Colors.red,
+                        trailing: TextButton(onPressed: () async { await _checkBackend(); setModalState(() {}); }, child: Text('Reconnect', style: TextStyle(color: const Color(0xFF00FFD1)))),
+                      ),
+                      _sRow(label: _ollamaRunning ? 'Ollama Running' : 'Ollama Starting...',
+                        labelColor: _ollamaRunning ? Colors.green : Colors.orange,
+                        icon: _ollamaRunning ? Icons.check_circle : Icons.radio_button_unchecked,
+                        iconColor: _ollamaRunning ? Colors.green : Colors.orange,
+                        trailing: const SizedBox(width: 40),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        child: Row(children: [
+                          Text('v$_currentVersion', style: TextStyle(color: _textSecondaryColor, fontSize: 12)),
+                          const Spacer(),
+                          TextButton(onPressed: () async {
+                            final update = await checkForUpdate();
+                            if (update == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You are on the latest version'), backgroundColor: Colors.green));
+                            } else { _checkForUpdate(); }
+                          }, child: Text('Check for Updates', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 12))),
+                        ]),
+                      ),
+                    ]),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sCard(String title, IconData icon, {required List<Widget> children}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(icon, color: const Color(0xFF00FFD1), size: 16),
+        const SizedBox(width: 8),
+        Text(title, style: TextStyle(color: _textSecondaryColor, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+      ]),
+      const SizedBox(height: 8),
+      Container(
+        decoration: BoxDecoration(
+          color: _bgColor.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _borderColor),
+        ),
+        child: Column(children: children),
+      ),
+    ]);
+  }
+
+  Widget _sRow({required String label, IconData? icon, Color? labelColor, Color? iconColor, Widget? trailing, bool selected = false, bool locked = false, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: locked ? null : onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: selected ? BoxDecoration(gradient: LinearGradient(colors: [const Color(0xFF00FFD1).withOpacity(0.06), Colors.transparent]), borderRadius: BorderRadius.circular(12)) : null,
+        child: Row(children: [
+          if (icon != null) ...[Icon(icon, size: 18, color: iconColor ?? (selected ? const Color(0xFF00FFD1) : _textSecondaryColor)), const SizedBox(width: 12)],
+          Expanded(child: Text(label, style: TextStyle(color: labelColor ?? (locked ? Colors.white38 : _textColor), fontSize: 14))),
+          if (trailing != null) trailing,
+        ]),
+      ),
+    );
+  }
+
+  Widget _permSwitch(String label, IconData icon, bool value, Function(bool) onChange, String key) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(children: [
+        Icon(icon, size: 18, color: value ? const Color(0xFF00FFD1) : _textSecondaryColor),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(color: _textColor, fontSize: 14)),
+          Text(value ? 'Granted' : 'Denied', style: TextStyle(color: value ? const Color(0xFF00FFD1) : Colors.redAccent.withOpacity(0.8), fontSize: 11)),
+        ])),
+        Switch(
+          value: value,
+          activeColor: const Color(0xFF00FFD1),
+          inactiveThumbColor: Colors.white38,
+          inactiveTrackColor: Colors.white10,
+          onChanged: (v) async { onChange(v); final p = await SharedPreferences.getInstance(); await p.setBool(key, v); },
+        ),
+      ]),
+    );
   }
 
   Widget _sectionHeader(String title) {
@@ -1608,4 +1717,12 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ));
   }
+}
+
+enum _TaskStatus { pending, running, done }
+
+class _TaskStep {
+  final String label;
+  _TaskStatus status;
+  _TaskStep(this.label, this.status);
 }
