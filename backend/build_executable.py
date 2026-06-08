@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PyInstaller 打包脚本 - Ono 后端服务
+PyInstaller 打包脚本 - Oko 后端服务
 将 app_server.py 打包成独立可执行文件
 """
 
@@ -50,7 +50,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ono_backend',
+    name='oko_backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -66,21 +66,21 @@ exe = EXE(
 )
 '''
     
-    with open('ono_backend.spec', 'w') as f:
+    with open('oko_backend.spec', 'w') as f:
         f.write(spec_content)
     
-    print("✅ Spec 文件已创建: ono_backend.spec")
+    print("✅ Spec 文件已创建: oko_backend.spec")
 
 def build_executable():
     """执行 PyInstaller 打包"""
     print("🔨 开始打包可执行文件...")
-    subprocess.run(["pyinstaller", "ono_backend.spec", "--clean"], check=True)
+    subprocess.run(["pyinstaller", "oko_backend.spec", "--clean"], check=True)
     print("✅ 打包完成！")
-    print(f"📂 可执行文件路径: {os.path.abspath('dist/ono_backend')}")
+    print(f"📂 可执行文件路径: {os.path.abspath('dist/oko_backend')}")
 
 def test_executable():
     """测试可执行文件"""
-    exe_path = os.path.abspath('dist/ono_backend')
+    exe_path = os.path.abspath('dist/oko_backend')
     
     if not os.path.exists(exe_path):
         print("❌ 可执行文件不存在，打包可能失败")
@@ -95,7 +95,7 @@ def test_executable():
 
 def main():
     print("=" * 60)
-    print("🚀 Ono 后端打包工具")
+    print("🚀 Oko 后端打包工具")
     print("=" * 60)
     print()
     
@@ -121,9 +121,9 @@ def main():
         print("=" * 60)
         print()
         print("📋 后续步骤:")
-        print("1. 测试可执行文件: ./dist/ono_backend")
+        print("1. 测试可执行文件: ./dist/oko_backend")
         print("2. 如果测试通过，复制到 Flutter 项目:")
-        print("   cp dist/ono_backend ../macos/Runner/")
+        print("   cp dist/oko_backend ../macos/Runner/")
         print("3. 在 Flutter 中调用这个可执行文件")
         print()
         

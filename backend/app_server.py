@@ -1,5 +1,5 @@
 """
-Ono AI Backend - FastAPI server
+Oko AI Backend - FastAPI server
 Runs locally, connects to Ollama for AI responses
 """
 
@@ -13,7 +13,7 @@ import sqlite3
 import os
 from datetime import datetime
 
-app = FastAPI(title="Ono AI Backend")
+app = FastAPI(title="Oko AI Backend")
 
 # Enable CORS for Flutter app
 app.add_middleware(
@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 # SQLite database for memory
-DB_PATH = os.path.expanduser("~/.ono/memory.db")
+DB_PATH = os.path.expanduser("~/.oko/memory.db")
 
 def init_db():
     """Initialize SQLite database for persistent memory"""
@@ -88,7 +88,7 @@ async def chat(request: ChatRequest):
         # Add system prompt
         messages.append({
             "role": "system",
-            "content": """You are Ono, a privacy-first AI assistant that helps users "把糊涂的事理清楚" (make sense of confusing things).
+            "content": """You are Oko, a privacy-first AI assistant that helps users "把糊涂的事理清楚" (make sense of confusing things).
 
 You are:
 - Helpful, concise, and friendly
@@ -212,7 +212,7 @@ async def get_preferences():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Ono Backend...")
+    print("🚀 Starting Oko Backend...")
     print("📍 API: http://localhost:8000")
     print("📍 Docs: http://localhost:8000/docs")
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -9,10 +9,10 @@ import 'package:path_provider/path_provider.dart';
 
 const String _currentVersion = '2.0.0';
 const String _repoOwner = 'zechengccc-alt';
-const String _repoName = 'ono';
+const String _repoName = 'oko';
 
 void main() {
-  runApp(const OnoApp());
+  runApp(const OkoApp());
 }
 
 // ============================================================
@@ -109,7 +109,7 @@ class _SplashScreenState extends State<SplashScreen>
                 Opacity(
                   opacity: _opacityAnim.value,
                   child: Text(
-                    'Ono',
+                    'Oko',
                     style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
@@ -193,20 +193,20 @@ final _lightTheme = ThemeData(
   useMaterial3: true,
 );
 
-class OnoApp extends StatefulWidget {
-  const OnoApp({super.key});
+class OkoApp extends StatefulWidget {
+  const OkoApp({super.key});
 
   @override
-  State<OnoApp> createState() => _OnoAppState();
+  State<OkoApp> createState() => _OkoAppState();
 }
 
-class _OnoAppState extends State<OnoApp> {
+class _OkoAppState extends State<OkoApp> {
   bool _showSplash = true;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ono',
+      title: 'Oko',
       debugShowCheckedModeBanner: false,
       theme: _darkTheme,
       darkTheme: _darkTheme,
@@ -292,7 +292,7 @@ class ChatSession {
 // DATABASE HELPER
 // ============================================================
 
-class OnoDatabase {
+class OkoDatabase {
   static Database? _db;
 
   static Future<Database> get db async {
@@ -302,7 +302,7 @@ class OnoDatabase {
 
   static Future<Database> _initDb() async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = p.join(dir.path, 'ono.db');
+    final path = p.join(dir.path, 'oko.db');
     return await openDatabase(path, version: 1, onCreate: (db, version) async {
       await db.execute('''
         CREATE TABLE sessions (
@@ -482,7 +482,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadSessions() async {
-    final sessions = await OnoDatabase.getSessions();
+    final sessions = await OkoDatabase.getSessions();
     setState(() => _sessions = sessions);
     if (_currentSessionId < 0 && sessions.isNotEmpty) {
       _switchSession(sessions.first.id!);
@@ -523,7 +523,7 @@ class _ChatPageState extends State<ChatPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-                'Ono ${update.latestVersion} is available (you have v$_currentVersion).',
+                'Oko ${update.latestVersion} is available (you have v$_currentVersion).',
                 style: TextStyle(color: Colors.white70)),
             if (update.releaseNotes.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -564,9 +564,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _newSession() async {
-    final id = await OnoDatabase.createSession(
+    final id = await OkoDatabase.createSession(
         'New Chat ${DateTime.now().hour}:${DateTime.now().minute}');
-    final sessions = await OnoDatabase.getSessions();
+    final sessions = await OkoDatabase.getSessions();
     setState(() {
       _sessions = sessions;
       _currentSessionId = id;
@@ -580,7 +580,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadMessages(int sessionId) async {
-    final msgs = await OnoDatabase.getMessages(sessionId);
+    final msgs = await OkoDatabase.getMessages(sessionId);
     setState(() => _messages = msgs);
   }
 
@@ -640,7 +640,7 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final executable = Platform.resolvedExecutable;
       final bundleDir = File(executable).parent.path;
-      final backendPath = '$bundleDir/ono_backend';
+      final backendPath = '$bundleDir/oko_backend';
       if (await File(backendPath).exists()) {
         final proc = await Process.start(backendPath, []);
         proc.stdout.listen((_) {});
@@ -683,7 +683,7 @@ class _ChatPageState extends State<ChatPage> {
       timestamp: now,
       sessionId: _currentSessionId,
     );
-    await OnoDatabase.addMessage(userMsg);
+    await OkoDatabase.addMessage(userMsg);
     setState(() {
       _messages.add(userMsg);
       _isLoading = true;
@@ -719,14 +719,14 @@ class _ChatPageState extends State<ChatPage> {
           timestamp: data['timestamp'] ?? DateTime.now().toIso8601String(),
           sessionId: _currentSessionId,
         );
-        await OnoDatabase.addMessage(assistantMsg);
+        await OkoDatabase.addMessage(assistantMsg);
         setState(() => _messages.add(assistantMsg));
 
         // Auto-update session title from first user message
         if (_messages.where((m) => m.isUser).length <= 1) {
           final shortTitle =
               text.length > 30 ? '${text.substring(0, 30)}...' : text;
-          final d = await OnoDatabase.db;
+          final d = await OkoDatabase.db;
           await d.update('sessions', {'title': shortTitle},
               where: 'id = ?', whereArgs: [_currentSessionId]);
           _loadSessions();
@@ -738,17 +738,17 @@ class _ChatPageState extends State<ChatPage> {
           timestamp: DateTime.now().toIso8601String(),
           sessionId: _currentSessionId,
         );
-        await OnoDatabase.addMessage(errMsg);
+        await OkoDatabase.addMessage(errMsg);
         setState(() => _messages.add(errMsg));
       }
     } catch (_) {
       final errMsg = ChatMessage(
-        content: 'Cannot connect to Ono backend. Is it running?',
+        content: 'Cannot connect to Oko backend. Is it running?',
         isUser: false,
         timestamp: DateTime.now().toIso8601String(),
         sessionId: _currentSessionId,
       );
-      await OnoDatabase.addMessage(errMsg);
+      await OkoDatabase.addMessage(errMsg);
       setState(() => _messages.add(errMsg));
     } finally {
       setState(() => _isLoading = false);
@@ -757,14 +757,14 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _clearCurrentChat() async {
-    final d = await OnoDatabase.db;
+    final d = await OkoDatabase.db;
     await d.delete('messages',
         where: 'session_id = ?', whereArgs: [_currentSessionId]);
     setState(() => _messages.clear());
   }
 
   void _deleteSession(int sessionId) async {
-    await OnoDatabase.deleteSession(sessionId);
+    await OkoDatabase.deleteSession(sessionId);
     _loadSessions();
     if (_currentSessionId == sessionId && _sessions.isNotEmpty) {
       _switchSession(_sessions.first.id!);
@@ -837,7 +837,7 @@ class _ChatPageState extends State<ChatPage> {
                             fontSize: 14))),
               ),
               const SizedBox(width: 8),
-              Text('Ono',
+              Text('Oko',
                   style: TextStyle(
                       color: const Color(0xFF00FFD1),
                       fontSize: 20,
@@ -1023,7 +1023,7 @@ class _ChatPageState extends State<ChatPage> {
                   style: TextStyle(color: _textColor, fontSize: _fontSize),
                   decoration: InputDecoration(
                       hintText:
-                          'Ask Ono anything... or type a command like "open Safari"',
+                          'Ask ok
                       hintStyle:
                           TextStyle(color: _hintTextColor, fontSize: _fontSize),
                       filled: true,
