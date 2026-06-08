@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -28,30 +29,29 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnim;
-  late Animation<double> _opacityAnim;
-  late Animation<double> _glowAnim;
+    with TickerProviderStateMixin {
+  late AnimationController _mainController;
+
+  // Phase timings (ms)
+  static const int _totalMs = 2200;
+  static const int _kAppearStart = 300;
+  static const int _kAppearEnd = 700;
+  static const int _splitStart = 700;
+  static const int _splitEnd = 1200;
+  static const int _auroraStart = 1200;
+  static const int _auroraEnd = 1700;
+  static const int _fadeStart = 1700;
+  static const int _fadeEnd = 2200;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _mainController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: _totalMs),
     );
-    _scaleAnim = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
-    );
-    _opacityAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.5)),
-    );
-    _glowAnim = Tween<double>(begin: 0.2, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _controller.forward().then((_) {
-      Future.delayed(const Duration(milliseconds: 400), () {
+    _mainController.forward().then((_) {
+      Future.delayed(const Duration(milliseconds: 200), () {
         widget.onDone();
       });
     });
@@ -59,106 +59,175 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _controller.dispose();
+    _mainController.dispose();
     super.dispose();
   }
+
+  double _progress(int startMs, int endMs) {
+    final t = _mainController.value * _totalMs;
+    if (t <= startMs) return 0.0;
+    if (t >= endMs) return 1.0;
+    return (t - startMs) / (endMs - startMs);
+  }
+
+  double _easeOut(double t) => 1 - (1 - t) * (1 - t);
+  double _easeInOut(double t) => t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) / 2;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
-      body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Transform.scale(
-                  scale: _scaleAnim.value,
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0F4C75), Color(0xFF00FFD1)],
-                      ),
-                      borderRadius: BorderRadius.circular(50),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00FFD1)
-                              .withOpacity(_glowAnim.value * 0.5),
-                          blurRadius: 40 * _glowAnim.value,
-                          spreadRadius: 10 * _glowAnim.value,
+      backgroundColor: const Color(0xFF050510),
+      body: AnimatedBuilder(
+        animation: _mainController,
+        builder: (context, _) {
+          final breathProgress = _progress(0, _kAppearEnd);
+          final kProgress = _easeOut(_progress(_kAppearStart, _kAppearEnd));
+          final splitProgress = _easeInOut(_progress(_splitStart, _splitEnd));
+          final auroraProgress = _easeOut(_progress(_auroraStart, _auroraEnd));
+          final fadeOutProgress = _easeOut(_progress(_fadeStart, _fadeEnd));
+          final scaleUp = 1.0 + fadeOutProgress * 0.15;
+
+          return Transform.scale(
+            scale: scaleUp,
+            child: Opacity(
+              opacity: 1.0 - fadeOutProgress,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // --- Breathing aurora glow ---
+                  if (breathProgress > 0)
+                    Container(
+                      width: 280 + breathProgress * 40,
+                      height: 280 + breathProgress * 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF00FFD1).withOpacity(0.08 * breathProgress),
+                            const Color(0xFF7B2FF7).withOpacity(0.06 * breathProgress),
+                            const Color(0xFF00B4D8).withOpacity(0.03 * breathProgress),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.4, 0.7, 1.0],
                         ),
-                      ],
+                      ),
                     ),
-                    child: Center(
-                      child: Text(
-                        'O',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(_opacityAnim.value),
-                          fontSize: 44,
-                          fontWeight: FontWeight.w900,
+
+                  // --- Aurora flow sweep (left to right) ---
+                  if (auroraProgress > 0)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: 240,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment(-1.0 + auroraProgress * 2.0, 0),
+                            end: Alignment(-1.0 + auroraProgress * 2.0 + 0.6, 0),
+                            colors: [
+                              Colors.transparent,
+                              const Color(0xFF00FFD1).withOpacity(0.4 * auroraProgress),
+                              const Color(0xFF7B2FF7).withOpacity(0.35 * auroraProgress),
+                              const Color(0xFF00B4D8).withOpacity(0.3 * auroraProgress),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Opacity(
-                  opacity: _opacityAnim.value,
-                  child: Text(
-                    'Oko',
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF00FFD1)
-                          .withOpacity(_opacityAnim.value),
-                      letterSpacing: -1,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FadeTransition(
-                  opacity: _glowAnim,
-                  child: const Text(
-                    'Privacy-first AI assistant',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF6B7280),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 48),
-                SizedBox(
-                  width: 40,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(3, (i) {
-                      return TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.3, end: 1.0),
-                        duration: const Duration(milliseconds: 600),
-                        builder: (context, value, _) => Padding(
-                          padding: EdgeInsets.only(right: i < 2 ? 4.0 : 0),
-                          child: Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00FFD1)
-                                  .withOpacity(value),
-                              shape: BoxShape.circle,
-                            ),
+
+                  // --- Particles ---
+                  if (auroraProgress > 0)
+                    ...List.generate(8, (i) {
+                      final angle = (i / 8) * 3.14159 * 2;
+                      final dist = 40.0 + auroraProgress * 60.0;
+                      final dx = cos(angle) * dist;
+                      final dy = sin(angle) * dist;
+                      return Transform.translate(
+                        offset: Offset(dx, dy),
+                        child: Container(
+                          width: 3,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: [
+                              const Color(0xFF00FFD1),
+                              const Color(0xFF7B2FF7),
+                              const Color(0xFF00B4D8),
+                            ][i % 3].withOpacity(0.7 * auroraProgress),
                           ),
                         ),
                       );
                     }),
+
+                  // --- Letters: O k O ---
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Left O (splits from center)
+                      _LetterWidget(
+                        letter: 'O',
+                        opacity: splitProgress,
+                        offsetX: -splitProgress * 52,
+                        scale: 0.5 + splitProgress * 0.5,
+                      ),
+                      // Center K
+                      _LetterWidget(
+                        letter: 'k',
+                        opacity: kProgress,
+                        offsetX: 0,
+                        scale: 0.8 + kProgress * 0.2,
+                      ),
+                      // Right O (splits from center)
+                      _LetterWidget(
+                        letter: 'o',
+                        opacity: splitProgress,
+                        offsetX: splitProgress * 52,
+                        scale: 0.5 + splitProgress * 0.5,
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LetterWidget extends StatelessWidget {
+  final String letter;
+  final double opacity;
+  final double offsetX;
+  final double scale;
+
+  const _LetterWidget({
+    required this.letter,
+    required this.opacity,
+    required this.offsetX,
+    required this.scale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: Offset(offsetX, 0),
+      child: Transform.scale(
+        scale: scale,
+        child: Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Text(
+            letter,
+            style: const TextStyle(
+              fontSize: 56,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF00FFD1),
+              letterSpacing: 2,
+            ),
+          ),
         ),
       ),
     );
@@ -1023,7 +1092,7 @@ class _ChatPageState extends State<ChatPage> {
                   style: TextStyle(color: _textColor, fontSize: _fontSize),
                   decoration: InputDecoration(
                       hintText:
-                          'Ask ok
+                          'Ask oko anything... or type a command like "open Safari"',
                       hintStyle:
                           TextStyle(color: _hintTextColor, fontSize: _fontSize),
                       filled: true,
