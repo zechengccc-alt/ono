@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:url_launcher/url_launcher_string.dart';
+import 'package:flutter/services.dart';
 
 const String _currentVersion = '2.0.0';
 const String _repoOwner = 'zechengccc-alt';
@@ -583,6 +586,11 @@ class _ChatPageState extends State<ChatPage> {
   String _licenseKey = '';
   static const int _trialDays = 21;
 
+  // ===== DEEP LINK HANDLER =====
+  static const _deepLinkChannel = MethodChannel('com.ono.app/deeplink');
+  StreamSubscription? _deepLinkSubscription;
+  String _deviceId = '';
+
   bool get _isPro {
     return _licenseStatus == 'STATUS_PRO_TRIAL' ||
            _licenseStatus == 'STATUS_PRO_LICENSE';
@@ -645,15 +653,89 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _initDeepLinkHandler();
     _loadSettings();
     _loadSessions();
   }
 
   @override
   void dispose() {
+    _deepLinkSubscription?.cancel();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Deep Link Handler: listens for oko://activate?token=JWT from Stripe callback
+  void _initDeepLinkHandler() {
+    _deepLinkChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onDeepLinkToken') {
+        final args = call.arguments as Map;
+        final action = args['action'] as String?;
+        final token = args['token'] as String?;
+
+        if (action == 'activate' && token != null) {
+          _handleActivationToken(token);
+        }
+      }
+    });
+  }
+
+  /// Process JWT license token from Stripe callback
+  Future<void> _handleActivationToken(String token) async {
+    // Phase 1: Simple token-based activation (no crypto yet)
+    // Token format: OKO-XXXX-XXXX-XXXX (same as manual license key)
+    // Future: Verify JWT signature with embedded public key
+    final success = await _activateLicense(token);
+    if (success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('License activated via secure link. Oko is fully unlocked.'),
+          backgroundColor: const Color(0xFF0F4C75),
+          duration: const Duration(seconds: 3),
+        ));
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Activation failed. Invalid license token.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+  }
+
+  /// Generate anonymous device ID for Stripe checkout tracking
+  Future<String> _getDeviceId() async {
+    if (_deviceId.isNotEmpty) return _deviceId;
+    final db = await OkoDatabase.db;
+    var id = await OkoDatabase.getConfig('device_id');
+    if (id == null || id.isEmpty) {
+      // Generate a random 16-char hex ID
+      final random = Random.secure();
+      id = List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join();
+      await OkoDatabase.setConfig('device_id', id);
+    }
+    _deviceId = id;
+    return _deviceId;
+  }
+
+  /// Open Stripe Checkout in system browser
+  Future<void> _openStripeCheckout() async {
+    final deviceId = await _getDeviceId();
+    // TODO: Replace with actual Stripe Checkout URL after setup
+    final stripeUrl = 'https://buy.stripe.com/TODO_REPLACE?client_reference_id=$deviceId';
+    // Also embed device_id in success_url deep link for callback
+    if (await canLaunchUrlString(stripeUrl)) {
+      await launchUrlString(stripeUrl);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not open browser. Please check your internet connection.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -2083,16 +2165,39 @@ class _ChatPageState extends State<ChatPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                        'Pro unlocks:\n- Multi-App Chain Agent\n- Smart Incremental DB\n- Advanced AI Playground (models + prompts)\n- Drag & Drop file parsing\n- Menu Bar Mode\nEnter your activation code:',
-                        style: TextStyle(
-                            color: _textSecondaryColor, fontSize: 12)),
+                    // Buy button - Stripe checkout
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00FFD1),
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.lock_open, size: 18),
+                        label: const Text('Buy Pro License', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _openStripeCheckout();
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      Expanded(child: Divider(color: _borderColor)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('or enter key', style: TextStyle(color: _textSecondaryColor.withOpacity(0.5), fontSize: 11)),
+                      ),
+                      Expanded(child: Divider(color: _borderColor)),
+                    ]),
                     const SizedBox(height: 12),
                     TextField(
                         controller: codeController,
                         style: TextStyle(color: _textColor),
                         decoration: InputDecoration(
-                            hintText: 'XXXX-XXXX-XXXX',
+                            hintText: 'OKO-XXXX-XXXX-XXXX',
                             hintStyle: TextStyle(color: _hintTextColor),
                             filled: true,
                             fillColor: _inputBgColor,
@@ -2101,11 +2206,6 @@ class _ChatPageState extends State<ChatPage> {
                                 borderSide: BorderSide.none),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10))),
-                    const SizedBox(height: 12),
-                    Text('Demo code: ONO-PRO-2026',
-                        style: TextStyle(
-                            color: _textSecondaryColor.withOpacity(0.6),
-                            fontSize: 11)),
                   ]),
               actions: [
                 TextButton(
