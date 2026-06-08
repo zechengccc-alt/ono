@@ -388,7 +388,8 @@ class OkoDatabase {
   static Future<Database> _initDb() async {
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, 'oko.db');
-    return await openDatabase(path, version: 1, onCreate: (db, version) async {
+    return await openDatabase(path, version: 2,
+      onCreate: (db, version) async {
       await db.execute('''
         CREATE TABLE sessions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -406,7 +407,23 @@ class OkoDatabase {
           FOREIGN KEY (session_id) REFERENCES sessions(id)
         )
       ''');
-    });
+      await db.execute('''
+        CREATE TABLE system_config (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL DEFAULT ''
+        )
+      ''');
+    },
+      onUpgrade: (db, oldVer, newVer) async {
+        if (oldVer < 2) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS system_config (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL DEFAULT ''
+            )
+          ''');
+        }
+      });
   }
 
   static Future<int> createSession(String title) async {
@@ -433,6 +450,39 @@ class OkoDatabase {
     final maps = await d.query('messages',
         where: 'session_id = ?', whereArgs: [sessionId], orderBy: 'id ASC');
     return maps.map(ChatMessage.fromMap).toList();
+  }
+
+  // ===== LICENSE MANAGEMENT =====
+  static Future<String?> getConfig(String key) async {
+    final d = await db;
+    final results = await d.query('system_config',
+        where: 'key = ?', whereArgs: [key]);
+    return results.isEmpty ? null : results.first['value'] as String?;
+  }
+
+  static Future<void> setConfig(String key, String value) async {
+    final d = await db;
+    await d.insert('system_config',
+        {'key': key, 'value': value},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<DateTime?> getFirstLaunchTime() async {
+    final raw = await getConfig('first_launch_time');
+    if (raw == null) {
+      final now = DateTime.now().toUtc().toIso8601String();
+      await setConfig('first_launch_time', now);
+      return DateTime.now().toUtc();
+    }
+    return DateTime.tryParse(raw);
+  }
+
+  static Future<void> saveLicenseKey(String key) async {
+    await setConfig('license_key', key);
+  }
+
+  static Future<String?> getLicenseKey() async {
+    return getConfig('license_key');
   }
 
   static Future<void> deleteSession(int sessionId) async {
@@ -524,7 +574,30 @@ class _ChatPageState extends State<ChatPage> {
   bool _isLoading = false;
   String _selectedModel = 'qwen2.5:3b';
   bool _backendConnected = false;
-  bool _isPro = false;  // Default to free tier
+  // ===== LICENSE STATE MACHINE =====
+  // STATUS_STANDARD: Free tier, Pro features sleep
+  // STATUS_PRO_TRIAL: 21-day full access, no card needed
+  // STATUS_PRO_LICENSE: Permanently unlocked via license key
+  String _licenseStatus = 'STATUS_STANDARD';
+  DateTime? _firstLaunchTime;
+  String _licenseKey = '';
+  static const int _trialDays = 21;
+
+  bool get _isPro {
+    return _licenseStatus == 'STATUS_PRO_TRIAL' ||
+           _licenseStatus == 'STATUS_PRO_LICENSE';
+  }
+
+  int get _trialDaysRemaining {
+    if (_firstLaunchTime == null) return 0;
+    final remaining = _trialDays -
+        DateTime.now().difference(_firstLaunchTime!).inDays;
+    return remaining.clamp(0, _trialDays);
+  }
+
+  bool get _isTrialActive {
+    return _licenseStatus == 'STATUS_PRO_TRIAL' && _trialDaysRemaining > 0;
+  }
   bool _ollamaRunning = false;
 
   // Settings
@@ -585,8 +658,11 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // ===== LICENSE STATE MACHINE INIT =====
+    await _initLicenseState();
+
     setState(() {
-      _isPro = prefs.getBool('is_pro') ?? false;
       _selectedModel = prefs.getString('selected_model') ?? 'qwen2.5:3b';
       _fontSize = prefs.getDouble('font_size') ?? 15.0;
       final tm = prefs.getInt('theme_mode') ?? 0;
@@ -606,6 +682,72 @@ class _ChatPageState extends State<ChatPage> {
           'You are Oko, a privacy-first local AI assistant. Help the user with any task.';
       _systemPromptController.text = _systemPrompt;
     });
+  }
+
+  /// Core license state machine — pure local, zero network dependency
+  Future<void> _initLicenseState() async {
+    final db = await OkoDatabase.db;
+
+    // 1. Check for existing license key
+    final savedKey = await OkoDatabase.getLicenseKey();
+    if (savedKey != null && savedKey.isNotEmpty) {
+      // Validate key format: OKO-XXXX-XXXX-XXXX (16 hex chars)
+      if (_isValidLicenseKey(savedKey)) {
+        setState(() {
+          _licenseStatus = 'STATUS_PRO_LICENSE';
+          _licenseKey = savedKey;
+        });
+        return;
+      }
+    }
+
+    // 2. No valid license — check trial
+    final firstLaunch = await OkoDatabase.getFirstLaunchTime();
+    setState(() => _firstLaunchTime = firstLaunch);
+
+    if (firstLaunch != null) {
+      final daysUsed = DateTime.now().toUtc().difference(firstLaunch).inDays;
+      if (daysUsed <= _trialDays) {
+        setState(() => _licenseStatus = 'STATUS_PRO_TRIAL');
+        return;
+      }
+    }
+
+    // 3. Trial expired, no license → Standard
+    setState(() => _licenseStatus = 'STATUS_STANDARD');
+  }
+
+  /// License key validation: OKO-XXXX-XXXX-XXXX (case-insensitive hex)
+  bool _isValidLicenseKey(String key) {
+    final normalized = key.trim().toUpperCase();
+    if (!RegExp(r'^OKO-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$').hasMatch(normalized)) {
+      return false;
+    }
+    // Simple checksum: last char of each group XOR must equal 0x5
+    final groups = normalized.replaceAll('OKO-', '').split('-');
+    if (groups.length != 3) return false;
+    int checksum = 0;
+    for (final g in groups) {
+      final lastChar = g.substring(g.length - 1);
+      checksum ^= int.parse(lastChar, radix: 16);
+    }
+    return checksum == 0x5;
+  }
+
+  /// Activate a license key
+  Future<bool> _activateLicense(String key) async {
+    final normalized = key.trim().toUpperCase();
+    if (!_isValidLicenseKey(normalized)) return false;
+
+    await OkoDatabase.saveLicenseKey(normalized);
+    setState(() {
+      _licenseStatus = 'STATUS_PRO_LICENSE';
+      _licenseKey = normalized;
+    });
+    // Migrate away from legacy SharedPreferences flag
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('is_pro');
+    return true;
   }
 
   Future<void> _loadSessions() async {
@@ -959,6 +1101,59 @@ class _ChatPageState extends State<ChatPage> {
   }
 
 
+  /// Renders a gray 'sleep mode' card when Pro feature is triggered on Standard
+  Widget _buildProSleepCard(String featureName) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E).withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2A2A3E)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.bedtime, color: const Color(0xFF6B7280), size: 20),
+          const SizedBox(width: 10),
+          Text(featureName, style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 8),
+        const Text(
+          'This feature is in sleep mode on Standard Core.',
+          style: TextStyle(color: Color(0xFF6B7280), fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F4C75).withOpacity(0.5),
+              foregroundColor: const Color(0xFF9CA3AF),
+              elevation: 0,
+            ),
+            onPressed: () => _showProUpgradeDialog(context),
+            child: const Text('Enter License Key to Wake', style: TextStyle(fontSize: 12)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// Trigger a Pro feature — returns true if feature should proceed
+  bool _canUseProFeature(String featureName) {
+    if (_isPro) return true;
+    // Show sleep card instead of error
+    setState(() {
+      _messages.add(ChatMessage(
+        content: 'PRO_SLEEP:$featureName',
+        isUser: false,
+        timestamp: DateTime.now().toIso8601String(),
+        sessionId: _currentSessionId,
+      ));
+    });
+    return false;
+  }
+
   Future<void> _pickFile() async {
     if (!_isPro) {
       if (mounted) {
@@ -978,13 +1173,8 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _handleDroppedFile(String filePath) async {
-    if (!_isPro) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('File parsing requires Pro'),
-          backgroundColor: Colors.red,
-        ));
-      }
+    if (!_canUseProFeature('File Parsing')) {
+      _scrollToBottom();
       return;
     }
     final fileName = filePath.split('/').last;
@@ -1344,6 +1534,17 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildMessageBubble(ChatMessage msg) {
+    // Render Pro sleep card for special sleep messages
+    if (msg.content.startsWith('PRO_SLEEP:')) {
+      final feature = msg.content.replaceFirst('PRO_SLEEP:', '');
+      final featureLabels = {
+        'Vision Pipeline': 'Multimodal Vision Pipeline',
+        'Smart Data Mapping': 'Smart Data Mapping',
+        'System Capture': 'System-Level Silent Capture',
+        'File Parsing': 'Drag & Drop File Parsing',
+      };
+      return _buildProSleepCard(featureLabels[feature] ?? feature);
+    }
     return Align(
         alignment:
             msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -1660,7 +1861,7 @@ class _ChatPageState extends State<ChatPage> {
                           border: Border.all(color: Colors.amber.withOpacity(0.3)),
                         ),
                         child: Column(children: [
-                          Text('Multi-App Chain Agent: auto-link SMS parsing to email drafts with attachments.\nSmart Incremental DB: append new data to existing tables instead of overwriting.\nAdvanced AI Playground: switch models + custom system prompts.\nDrag & Drop parsing: drop PDFs/images to auto-extract data.', style: TextStyle(color: _textSecondaryColor, fontSize: 11)),
+                          Text('A: Multimodal Vision Pipeline — parse handwritten receipts & invoices.\nB: Smart Data Mapping — custom Excel templates with auto-append.\nC: System Capture — global hotkey silent screen grab + automation.\nChain Agent + Incremental DB + AI Playground + Drag & Drop.', style: TextStyle(color: _textSecondaryColor, fontSize: 11)),
                           const SizedBox(height: 10),
                           SizedBox(width: double.infinity, child: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
@@ -1854,6 +2055,22 @@ class _ChatPageState extends State<ChatPage> {
             letterSpacing: 0.5));
   }
 
+  String _buildSovereignStatusText() {
+    final now = DateTime.now().toUtc();
+    if (_licenseStatus == 'STATUS_PRO_LICENSE') {
+      return 'Local Node Status: Pro (License Key)\n'
+          'Cloud Sandbox Status: Fully Detached (0B Leaked)\n'
+          'License: \${_licenseKey.substring(0, 9)}...\${_licenseKey.substring(_licenseKey.length - 4)}';
+    } else if (_isTrialActive) {
+      return 'Local Node Status: Pro Trial (\${_trialDaysRemaining} days remaining)\n'
+          'Cloud Sandbox Status: Fully Detached (0B Leaked)';
+    } else {
+      return 'Pro features sleep mode activated.\n'
+          'Custom mapping and system automation are paused.\n'
+          'Oko is running on Standard Core.';
+    }
+  }
+
   void _showProUpgradeDialog(BuildContext ctx) {
     final codeController = TextEditingController();
     showDialog(
@@ -1901,21 +2118,15 @@ class _ChatPageState extends State<ChatPage> {
                         foregroundColor: Colors.black),
                     onPressed: () async {
                       final code = codeController.text.trim().toUpperCase();
-                      // Demo validation - replace with real license check
-                      if (code == 'ONO-PRO-2026' ||
-                          code == 'ZEChengCCC' ||
-                          code.length == 14) {
-                        final prefs =
-                            await SharedPreferences.getInstance();
-                        await prefs.setBool('is_pro', true);
-                        setState(() => _isPro = true);
+                      final success = await _activateLicense(code);
+                      if (success) {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                            content: Text('Upgraded to Pro!'),
-                            backgroundColor: Colors.green));
+                            content: Text('License activated. Oko is fully unlocked.'),
+                            backgroundColor: const Color(0xFF0F4C75)));
                       } else {
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                            content: Text('Invalid code. Try ONO-PRO-2026'),
+                            content: Text('Invalid format. Expected: OKO-XXXX-XXXX-XXXX'),
                             backgroundColor: Colors.red));
                       }
                     },
