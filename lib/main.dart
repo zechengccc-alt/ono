@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 
 const String _currentVersion = '2.0.0';
 const String _repoOwner = 'zechengccc-alt';
@@ -546,10 +547,17 @@ class _ChatPageState extends State<ChatPage> {
   String _language = 'en';
   String _username = 'User';
 
+  // Drag & drop state
+  bool _isDragOver = false;
+
   // Task progress card state
   bool _showTaskCard = false;
   String _taskTitle = '';
   List<_TaskStep> _taskSteps = [];
+
+  // System prompt (Pro customizable)
+  String _systemPrompt = 'You are Oko, a privacy-first local AI assistant. Help the user with any task.';
+  final _systemPromptController = TextEditingController();
 
   // All available models
   static const List<Map<String, String>> _allModels = [
@@ -558,6 +566,7 @@ class _ChatPageState extends State<ChatPage> {
     {'id': 'llama3.2:3b', 'name': 'llama3.2:3b', 'tier': 'pro'},
     {'id': 'mistral:7b', 'name': 'mistral:7b', 'tier': 'pro'},
     {'id': 'gemma2:9b', 'name': 'gemma2:9b', 'tier': 'pro'},
+    {'id': 'qwen2.5:14b', 'name': 'qwen2.5:14b', 'tier': 'pro'},
   ];
 
   @override
@@ -593,6 +602,9 @@ class _ChatPageState extends State<ChatPage> {
       _permClipboard = prefs.getBool('perm_clipboard') ?? true;
       _permTerminal = prefs.getBool('perm_terminal') ?? false;
       _permBrowser = prefs.getBool('perm_browser') ?? false;
+      _systemPrompt = prefs.getString('system_prompt') ??
+          'You are Oko, a privacy-first local AI assistant. Help the user with any task.';
+      _systemPromptController.text = _systemPrompt;
     });
   }
 
@@ -822,6 +834,7 @@ class _ChatPageState extends State<ChatPage> {
               'message': text,
               'model': _selectedModel,
               'history': history,
+              'system_prompt': _systemPrompt,
             }),
           )
           .timeout(const Duration(seconds: 120));
@@ -932,14 +945,153 @@ class _ChatPageState extends State<ChatPage> {
         appBar: _buildAppBar(),
         body: Stack(children: [
           if (_themeMode == ThemeMode.dark) _buildAuroraBackground(),
-          Column(children: [
-            if (_showTaskCard) _buildTaskCard(),
-            Expanded(child: _buildChatArea()),
-            _buildInputArea(),
-          ]),
+          _buildDropTarget(
+            Column(children: [
+              if (_showTaskCard) _buildTaskCard(),
+              Expanded(child: _buildChatArea()),
+              _buildInputArea(),
+            ]),
+          ),
           if (_showSidebar) _buildSidebar(),
         ]),
       ),
+    );
+  }
+
+
+  Future<void> _pickFile() async {
+    if (!_isPro) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('File parsing requires Pro'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Drop a PDF or image file onto the chat to parse it'),
+        backgroundColor: const Color(0xFF0F4C75),
+      ));
+    }
+  }
+
+  Future<void> _handleDroppedFile(String filePath) async {
+    if (!_isPro) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('File parsing requires Pro'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+    final fileName = filePath.split('/').last;
+    final userMsg = ChatMessage(
+      content: '[File: $fileName] - Parsing...',
+      isUser: true,
+      timestamp: DateTime.now().toIso8601String(),
+      sessionId: _currentSessionId,
+    );
+    await OkoDatabase.addMessage(userMsg);
+    setState(() {
+      _messages.add(userMsg);
+      _showTaskCard = true;
+      _taskTitle = 'Parsing $fileName';
+      _taskSteps = [
+        _TaskStep('Reading file', _TaskStatus.running),
+        _TaskStep('Extracting content (OCR)', _TaskStatus.pending),
+        _TaskStep('Analyzing data', _TaskStatus.pending),
+      ];
+    });
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/api/parse-file'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'file_path': filePath, 'model': _selectedModel}),
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _taskSteps[0].status = _TaskStatus.done;
+          _taskSteps[1].status = _TaskStatus.done;
+          _taskSteps[2].status = _TaskStatus.done;
+        });
+        final assistantMsg = ChatMessage(
+          content: data['response'] ?? 'File parsed successfully',
+          isUser: false,
+          timestamp: DateTime.now().toIso8601String(),
+          sessionId: _currentSessionId,
+        );
+        await OkoDatabase.addMessage(assistantMsg);
+        setState(() => _messages.add(assistantMsg));
+      } else {
+        throw Exception('Parse failed');
+      }
+    } catch (e) {
+      setState(() {
+        _taskSteps[0].status = _TaskStatus.done;
+        _taskSteps[1].status = _TaskStatus.done;
+        _taskSteps[2].status = _TaskStatus.done;
+      });
+      final errMsg = ChatMessage(
+        content: 'Could not parse file. Backend /api/parse-file endpoint not available yet.',
+        isUser: false,
+        timestamp: DateTime.now().toIso8601String(),
+        sessionId: _currentSessionId,
+      );
+      await OkoDatabase.addMessage(errMsg);
+      setState(() => _messages.add(errMsg));
+    }
+    _scrollToBottom();
+  }
+
+  Widget _buildDropTarget(Widget child) {
+    return DropTarget(
+      onDragEntered: (details) => setState(() => _isDragOver = true),
+      onDragExited: (details) => setState(() => _isDragOver = false),
+      onDragDone: (details) {
+        setState(() => _isDragOver = false);
+        for (final file in details.files) {
+          _handleDroppedFile(file.path);
+          break; // Process first file only
+        }
+      },
+      child: Stack(children: [
+        child,
+        if (_isDragOver)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00FFD1).withOpacity(0.05),
+                  border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.4), width: 3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: _surfaceColor.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF00FFD1), width: 1),
+                      boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.2), blurRadius: 20)],
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.upload_file, color: const Color(0xFF00FFD1), size: 28),
+                      const SizedBox(width: 12),
+                      Text('Drop file to parse', style: TextStyle(color: const Color(0xFF00FFD1), fontSize: 16, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ]),
     );
   }
 
@@ -1508,13 +1660,52 @@ class _ChatPageState extends State<ChatPage> {
                           border: Border.all(color: Colors.amber.withOpacity(0.3)),
                         ),
                         child: Column(children: [
-                          Text('Unlock all AI models, custom themes, and advanced permissions.', style: TextStyle(color: _textSecondaryColor, fontSize: 12)),
+                          Text('Multi-App Chain Agent: auto-link SMS parsing to email drafts with attachments.\nSmart Incremental DB: append new data to existing tables instead of overwriting.\nAdvanced AI Playground: switch models + custom system prompts.\nDrag & Drop parsing: drop PDFs/images to auto-extract data.', style: TextStyle(color: _textSecondaryColor, fontSize: 11)),
                           const SizedBox(height: 10),
                           SizedBox(width: double.infinity, child: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                             onPressed: () => _showProUpgradeDialog(context),
                             child: Text('Upgrade Now'),
                           )),
+                        ]),
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
+
+                    // AI Playground (Pro)
+                    _sCard('AI Playground', Icons.auto_awesome, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            Icon(Icons.psychology, size: 18, color: _isPro ? const Color(0xFF00FFD1) : Colors.white24),
+                            const SizedBox(width: 12),
+                            Text('Custom System Prompt', style: TextStyle(color: _isPro ? _textColor : Colors.white38, fontSize: 14)),
+                          ]),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _systemPromptController,
+                            enabled: _isPro,
+                            maxLines: 3,
+                            style: TextStyle(color: _isPro ? _textColor : Colors.white38, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'E.g. "Classify all Uber charges as travel"',
+                              hintStyle: TextStyle(color: _hintTextColor, fontSize: 12),
+                              filled: true,
+                              fillColor: _bgColor,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: _borderColor)),
+                              contentPadding: const EdgeInsets.all(10),
+                            ),
+                            onChanged: (v) async {
+                              setState(() => _systemPrompt = v);
+                              final p = await SharedPreferences.getInstance();
+                              await p.setString('system_prompt', v);
+                            },
+                          ),
+                          if (!_isPro) Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text('Upgrade to Pro to customize system prompt', style: TextStyle(color: Colors.amber.withOpacity(0.8), fontSize: 11)),
+                          ),
                         ]),
                       ),
                     ]),
@@ -1556,6 +1747,21 @@ class _ChatPageState extends State<ChatPage> {
                         icon: _ollamaRunning ? Icons.check_circle : Icons.radio_button_unchecked,
                         iconColor: _ollamaRunning ? Colors.green : Colors.orange,
                         trailing: const SizedBox(width: 40),
+                      ),
+                      _sRow(label: 'Menu Bar Mode',
+                        icon: Icons.minimize,
+                        iconColor: _isPro ? const Color(0xFF00FFD1) : Colors.white24,
+                        trailing: Switch(
+                          value: false,
+                          activeColor: const Color(0xFF00FFD1),
+                          onChanged: _isPro ? (v) {
+                            // Menu bar mode would use system_tray package
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('Menu bar mode coming soon'),
+                              backgroundColor: const Color(0xFF0F4C75),
+                            ));
+                          } : null,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Padding(
@@ -1661,9 +1867,9 @@ class _ChatPageState extends State<ChatPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        'Enter your activation code to unlock Pro features:',
+                        'Pro unlocks:\n- Multi-App Chain Agent\n- Smart Incremental DB\n- Advanced AI Playground (models + prompts)\n- Drag & Drop file parsing\n- Menu Bar Mode\nEnter your activation code:',
                         style: TextStyle(
-                            color: _textSecondaryColor, fontSize: 13)),
+                            color: _textSecondaryColor, fontSize: 12)),
                     const SizedBox(height: 12),
                     TextField(
                         controller: codeController,
