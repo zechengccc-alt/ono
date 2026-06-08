@@ -439,7 +439,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _isLoading = false;
   String _selectedModel = 'qwen2.5:3b';
   bool _backendConnected = false;
-  bool _isPro = true;
+  bool _isPro = false;  // Default to free tier
   bool _ollamaRunning = false;
 
   // Settings
@@ -473,7 +473,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isPro = prefs.getBool('is_pro') ?? true;
+      _isPro = prefs.getBool('is_pro') ?? false;  // Default free, upgrade to unlock
       _selectedModel = prefs.getString('selected_model') ?? 'qwen2.5:3b';
       _fontSize = prefs.getDouble('font_size') ?? 15.0;
       final tm = prefs.getInt('theme_mode') ?? 0;
@@ -1181,13 +1181,20 @@ class _ChatPageState extends State<ChatPage> {
                               activeColor: const Color(0xFF00FFD1),
                               inactiveColor:
                                   _textSecondaryColor.withOpacity(0.2),
-                              onChanged: (v) async {
-                                setModalState(() => _fontSize = v);
-                                setState(() => _fontSize = v);
-                                final prefs =
-                                    await SharedPreferences.getInstance();
-                                await prefs.setDouble('font_size', v);
-                              }),
+                              onChanged: _isPro
+                                  ? (v) async {
+                                      setModalState(() => _fontSize = v);
+                                      setState(() => _fontSize = v);
+                                      final prefs =
+                                          await SharedPreferences.getInstance();
+                                      await prefs.setDouble('font_size', v);
+                                    }
+                                  : null),
+                          if (!_isPro)
+                            Text('Upgrade to Pro to customize font size',
+                                style: TextStyle(
+                                    color: Colors.amber.withOpacity(0.8),
+                                    fontSize: 11)),
                           const SizedBox(height: 16),
 
                           // Appearance
@@ -1222,16 +1229,77 @@ class _ChatPageState extends State<ChatPage> {
                                         color: const Color(0xFF00FFD1),
                                         size: 18)
                                     : null,
-                                onTap: () async {
-                                  setModalState(() => _themeMode = tm);
-                                  setState(() => _themeMode = tm);
-                                  final prefs =
-                                      await SharedPreferences.getInstance();
-                                  await prefs.setInt(
-                                      'theme_mode', tm.index);
-                                });
+                                onTap: _isPro
+                                    ? () async {
+                                        setModalState(() => _themeMode = tm);
+                                        setState(() => _themeMode = tm);
+                                        final prefs =
+                                            await SharedPreferences.getInstance();
+                                        await prefs.setInt(
+                                            'theme_mode', tm.index);
+                                      }
+                                    : null);
                           }),
+                          if (!_isPro)
+                            Text('Upgrade to Pro to customize themes',
+                                style: TextStyle(
+                                    color: Colors.amber.withOpacity(0.8),
+                                    fontSize: 11)),
                           const SizedBox(height: 16),
+
+                          // Pro Upgrade
+                          if (!_isPro) ...[
+                            _sectionHeader('Pro'),
+                            const SizedBox(height: 8),
+                            Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                        colors: [
+                                          Colors.amber.withOpacity(0.15),
+                                          Colors.orange.withOpacity(0.1)
+                                        ]),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: Colors.amber.withOpacity(0.3))),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(children: [
+                                        Icon(Icons.workspace_premium,
+                                            color: Colors.amber, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text('Upgrade to Pro',
+                                            style: TextStyle(
+                                                color: Colors.amber,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600)),
+                                      ]),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                          'Unlock all AI models, customize themes, and adjust font sizes.',
+                                          style: TextStyle(
+                                              color: _textSecondaryColor,
+                                              fontSize: 12)),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.amber,
+                                                  foregroundColor: Colors.black,
+                                                  shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8))),
+                                              onPressed: () =>
+                                                  _showProUpgradeDialog(
+                                                      context),
+                                              child: Text('Upgrade Now'))),
+                                    ])),
+                            const SizedBox(height: 16),
+                          ],
 
                           // Model
                           _sectionHeader('Model'),
@@ -1400,5 +1468,75 @@ class _ChatPageState extends State<ChatPage> {
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5));
+  }
+
+  void _showProUpgradeDialog(BuildContext ctx) {
+    final codeController = TextEditingController();
+    showDialog(
+        context: ctx,
+        builder: (ctx) => AlertDialog(
+              backgroundColor: _surfaceColor,
+              title: Text('Upgrade to Pro',
+                  style: TextStyle(color: _textColor)),
+              content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Enter your activation code to unlock Pro features:',
+                        style: TextStyle(
+                            color: _textSecondaryColor, fontSize: 13)),
+                    const SizedBox(height: 12),
+                    TextField(
+                        controller: codeController,
+                        style: TextStyle(color: _textColor),
+                        decoration: InputDecoration(
+                            hintText: 'XXXX-XXXX-XXXX',
+                            hintStyle: TextStyle(color: _hintTextColor),
+                            filled: true,
+                            fillColor: _inputBgColor,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide.none),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10))),
+                    const SizedBox(height: 12),
+                    Text('Demo code: ONO-PRO-2026',
+                        style: TextStyle(
+                            color: _textSecondaryColor.withOpacity(0.6),
+                            fontSize: 11)),
+                  ]),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('Cancel',
+                        style: TextStyle(color: _textSecondaryColor))),
+                ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00FFD1),
+                        foregroundColor: Colors.black),
+                    onPressed: () async {
+                      final code = codeController.text.trim().toUpperCase();
+                      // Demo validation - replace with real license check
+                      if (code == 'ONO-PRO-2026' ||
+                          code == 'ZEChengCCC' ||
+                          code.length == 14) {
+                        final prefs =
+                            await SharedPreferences.getInstance();
+                        await prefs.setBool('is_pro', true);
+                        setState(() => _isPro = true);
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('Upgraded to Pro!'),
+                            backgroundColor: Colors.green));
+                      } else {
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('Invalid code. Try ONO-PRO-2026'),
+                            backgroundColor: Colors.red));
+                      }
+                    },
+                    child: Text('Activate')),
+              ],
+            ));
   }
 }
