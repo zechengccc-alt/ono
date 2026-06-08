@@ -211,8 +211,11 @@ async def get_preferences():
     return {"preferences": {r[0]: r[1] for r in rows}}
 
 if __name__ == "__main__":
+    from model_router import create_router_app
     import uvicorn
-    print("🚀 Starting Oko Backend...")
-    print("📍 API: http://localhost:8000")
-    print("📍 Docs: http://localhost:8000/docs")
+    app = create_router_app()
+    print("[Oko] Dual-Bridge Backend starting...")
+    print("  Tier 1 (Core):  gemma2:2b  — always resident")
+    print("  Tier 2 (Heavy): phi3:3.8b  — lazy-loaded on demand")
+    print("  API: http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)

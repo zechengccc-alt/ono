@@ -575,7 +575,7 @@ class _ChatPageState extends State<ChatPage> {
   List<ChatSession> _sessions = [];
   int _currentSessionId = -1;
   bool _isLoading = false;
-  String _selectedModel = 'qwen2.5:3b';
+  String _selectedModel = 'auto';
   bool _backendConnected = false;
   // ===== LICENSE STATE MACHINE =====
   // STATUS_STANDARD: Free tier, Pro features sleep
@@ -640,14 +640,13 @@ class _ChatPageState extends State<ChatPage> {
   String _systemPrompt = 'You are Oko, a privacy-first local AI assistant. Help the user with any task.';
   final _systemPromptController = TextEditingController();
 
-  // All available models
+  // All available models — Dual-Bridge: Tier 1 = fast core, Tier 2 = heavy reasoning
   static const List<Map<String, String>> _allModels = [
-    {'id': 'qwen2.5:3b', 'name': 'qwen2.5:3b', 'tier': 'free'},
-    {'id': 'qwen2.5:7b', 'name': 'qwen2.5:7b', 'tier': 'pro'},
-    {'id': 'llama3.2:3b', 'name': 'llama3.2:3b', 'tier': 'pro'},
-    {'id': 'mistral:7b', 'name': 'mistral:7b', 'tier': 'pro'},
-    {'id': 'gemma2:9b', 'name': 'gemma2:9b', 'tier': 'pro'},
-    {'id': 'qwen2.5:14b', 'name': 'qwen2.5:14b', 'tier': 'pro'},
+    {'id': 'auto', 'name': 'Auto (Router)', 'tier': 'free', 'desc': 'Dual-Bridge AI picks the best model'},
+    {'id': 'gemma2:2b', 'name': 'gemma2:2b', 'tier': 'free', 'desc': 'Tier 1 Core — always fast'},
+    {'id': 'phi3:3.8b', 'name': 'phi3:3.8b', 'tier': 'pro', 'desc': 'Tier 2 Heavy — deep reasoning'},
+    {'id': 'qwen2.5:7b', 'name': 'qwen2.5:7b', 'tier': 'pro', 'desc': 'Optional heavy model'},
+    {'id': 'qwen2.5:3b', 'name': 'qwen2.5:3b', 'tier': 'free', 'desc': 'Legacy fallback'},
   ];
 
   @override
@@ -745,7 +744,7 @@ class _ChatPageState extends State<ChatPage> {
     await _initLicenseState();
 
     setState(() {
-      _selectedModel = prefs.getString('selected_model') ?? 'qwen2.5:3b';
+      _selectedModel = prefs.getString('selected_model') ?? 'auto';
       _fontSize = prefs.getDouble('font_size') ?? 15.0;
       final tm = prefs.getInt('theme_mode') ?? 0;
       _themeMode = ThemeMode.values[tm];
@@ -1050,23 +1049,30 @@ class _ChatPageState extends State<ChatPage> {
               })
           .toList();
 
+      final chatBody = {
+        'message': text,
+        'history': history,
+        'system_prompt': _systemPrompt,
+      };
+      if (_selectedModel != 'auto') chatBody['model'] = _selectedModel;
+
       final response = await http
           .post(
             Uri.parse('http://localhost:8000/api/chat'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'message': text,
-              'model': _selectedModel,
-              'history': history,
-              'system_prompt': _systemPrompt,
-            }),
+            body: jsonEncode(chatBody),
           )
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        // Show which model the router picked
+        final usedModel = data['model'] ?? _selectedModel;
+        final routerTier = data['tier'] ?? '';
         final assistantMsg = ChatMessage(
-          content: data['response'] ?? 'No response',
+          content: routerTier.isNotEmpty && routerTier != 'tier1'
+              ? '${data['response'] ?? 'No response'}\n\n--- ${usedModel} (${routerTier}) ---'
+              : (data['response'] ?? 'No response'),
           isUser: false,
           timestamp: data['timestamp'] ?? DateTime.now().toIso8601String(),
           sessionId: _currentSessionId,
