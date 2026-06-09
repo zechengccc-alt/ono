@@ -3,85 +3,174 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>oko - Privacy-First AI Assistant</title>
+  <title>Oko - Privacy-First AI Assistant</title>
   <meta name="description" content="Privacy-first AI assistant. 100% local. No cloud. No tracking. Free core + Pro buy-once license.">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a1a; color: #fff; min-height: 100vh; }
-    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem; background: radial-gradient(ellipse at 30% 50%, rgba(0,212,255,0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 50%, rgba(123,47,247,0.08) 0%, transparent 50%), #0a0a1a; }
-    .logo { width: 120px; height: 120px; border-radius: 28px; margin-bottom: 2rem; animation: logoPulse 4s ease-in-out infinite; }
-    @keyframes logoPulse { 0%,100% { box-shadow: 0 0 40px rgba(0,212,255,0.15); } 50% { box-shadow: 0 0 60px rgba(123,47,247,0.25); } }
-    h1 { font-size: 3.5rem; font-weight: 700; margin-bottom: 1rem; background: linear-gradient(135deg, #00d4ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .tagline { font-size: 1.25rem; color: #aaa; max-width: 600px; margin-bottom: 2rem; line-height: 1.6; }
-    .badges { display: flex; gap: 12px; margin-bottom: 2rem; flex-wrap: wrap; justify-content: center; }
-    .badge { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .badge-pro { background: rgba(0,212,255,0.12); color: #00d4ff; border: 1px solid rgba(0,212,255,0.3); }
-    .badge-trial { background: rgba(123,47,247,0.12); color: #b87bff; border: 1px solid rgba(123,47,247,0.3); }
-    .btn-group { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: center; }
-    .btn { display: inline-block; padding: 1rem 2.5rem; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 1.1rem; transition: transform 0.2s; cursor: pointer; border: none; }
-    .btn:hover { transform: scale(1.05); }
-    .btn-primary { background: linear-gradient(135deg, #00d4ff, #7b2ff7); }
-    .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.2); }
-    .btn-outline:hover { border-color: rgba(0,212,255,0.5); }
-    .btn-android { background: transparent; border: 1px solid rgba(0,200,100,0.3); color: #00c864; }
-    .btn-android:hover { border-color: rgba(0,200,100,0.6); transform: scale(1.05); }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a1a; color: #fff; min-height: 100vh; overflow-x: hidden; }
 
-    .features { padding: 4rem 2rem; max-width: 1000px; margin: 0 auto; }
-    .features h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
+    /* ── Nav ── */
+    nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; background: rgba(10,10,26,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-logo span { font-size: 1.2rem; font-weight: 700; background: linear-gradient(135deg, #00d4ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: rgba(255,255,255,0.5); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+    .nav-badge { padding: 4px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; background: rgba(0,212,255,0.1); color: #00d4ff; border: 1px solid rgba(0,212,255,0.2); }
 
-    .changelog { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; }
-    .changelog h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
-    .version { margin-bottom: 16px; border: 1px solid #2a2a4a; border-radius: 12px; overflow: hidden; transition: border-color 0.2s; }
-    .version:hover { border-color: #3a3a5a; }
-    .version-header { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; background: #141428; user-select: none; }
-    .version-header:hover { background: #1a1a35; }
-    .version-tag { display: flex; align-items: center; gap: 12px; }
-    .version-num { font-weight: 700; font-size: 16px; color: #e0e0e0; }
-    .version-label { font-size: 13px; color: #888; }
-    .version-current { background: linear-gradient(135deg, #00d4ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-    .version-chevron { color: #666; transition: transform 0.2s; font-size: 14px; }
+    /* ── Hero ── */
+    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem 4rem; position: relative; }
+    .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 25% 40%, rgba(0,212,255,0.07) 0%, transparent 50%), radial-gradient(ellipse at 75% 60%, rgba(123,47,247,0.07) 0%, transparent 50%); pointer-events: none; }
+    .hero-logo { width: 96px; height: 96px; border-radius: 24px; margin-bottom: 2rem; animation: logoPulse 4s ease-in-out infinite; position: relative; z-index: 1; }
+    @keyframes logoPulse { 0%,100% { box-shadow: 0 0 40px rgba(0,212,255,0.12), 0 0 80px rgba(123,47,247,0.06); } 50% { box-shadow: 0 0 60px rgba(0,212,255,0.2), 0 0 120px rgba(123,47,247,0.1); } }
+    .hero h1 { font-size: 4rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 1rem; background: linear-gradient(135deg, #00d4ff 0%, #7b2ff7 50%, #00d4ff 100%); background-size: 200% 200%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: gradientShift 6s ease infinite; position: relative; z-index: 1; }
+    @keyframes gradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    .tagline { font-size: 1.15rem; color: rgba(255,255,255,0.5); max-width: 520px; margin-bottom: 2.5rem; line-height: 1.7; position: relative; z-index: 1; }
+
+    /* ── CTA Buttons (Glass) ── */
+    .cta-group { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
+    .cta { display: inline-flex; align-items: center; gap: 10px; padding: 14px 32px; border-radius: 14px; font-weight: 600; font-size: 1rem; text-decoration: none; cursor: pointer; transition: all 0.25s; border: none; position: relative; overflow: hidden; }
+    .cta-download { background: rgba(0,212,255,0.12); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: #00d4ff; border: 1px solid rgba(0,212,255,0.25); }
+    .cta-download:hover { background: rgba(0,212,255,0.2); border-color: rgba(0,212,255,0.45); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,212,255,0.15); }
+    .cta-pro { background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(123,47,247,0.15)); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: #d4b0ff; border: 1px solid rgba(123,47,247,0.3); }
+    .cta-pro:hover { background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(123,47,247,0.25)); border-color: rgba(123,47,247,0.5); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(123,47,247,0.15); }
+    .cta svg { width: 18px; height: 18px; }
+
+    /* ── Feature Cards (Aurora) ── */
+    .features { padding: 3rem 2rem 4rem; max-width: 1100px; margin: 0 auto; }
+    .features-header { text-align: center; margin-bottom: 3rem; }
+    .features-header h2 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .features-header p { color: rgba(255,255,255,0.4); font-size: 0.95rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .card { border-radius: 20px; padding: 2rem 2rem 1.75rem; position: relative; overflow: hidden; transition: transform 0.3s, box-shadow 0.3s; }
+    .card:hover { transform: translateY(-4px); }
+    .card::before { content: ''; position: absolute; inset: 0; border-radius: 20px; padding: 1px; background: linear-gradient(135deg, rgba(0,212,255,0.3), transparent 50%, rgba(123,47,247,0.3)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+    .card-rag { background: linear-gradient(160deg, rgba(0,212,255,0.08) 0%, rgba(0,60,120,0.05) 100%); }
+    .card-rag:hover { box-shadow: 0 12px 48px rgba(0,212,255,0.1); }
+    .card-vision { background: linear-gradient(160deg, rgba(123,47,247,0.08) 0%, rgba(60,0,120,0.05) 100%); }
+    .card-vision:hover { box-shadow: 0 12px 48px rgba(123,47,247,0.1); }
+    .card-memory { background: linear-gradient(160deg, rgba(0,212,200,0.08) 0%, rgba(0,100,100,0.05) 100%); }
+    .card-memory:hover { box-shadow: 0 12px 48px rgba(0,212,200,0.1); }
+
+    .card-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem; font-size: 22px; }
+    .card-rag .card-icon { background: rgba(0,212,255,0.12); }
+    .card-vision .card-icon { background: rgba(123,47,247,0.12); }
+    .card-memory .card-icon { background: rgba(0,212,200,0.12); }
+    .card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .card-rag h3 { color: #00d4ff; }
+    .card-vision h3 { color: #c090ff; }
+    .card-memory h3 { color: #00d4c8; }
+    .card p { color: rgba(255,255,255,0.45); font-size: 0.92rem; line-height: 1.65; }
+    .card-glow { position: absolute; width: 120px; height: 120px; border-radius: 50%; filter: blur(60px); opacity: 0.15; pointer-events: none; }
+    .card-rag .card-glow { top: -20px; right: -20px; background: #00d4ff; }
+    .card-vision .card-glow { top: -20px; right: -20px; background: #7b2ff7; }
+    .card-memory .card-glow { bottom: -20px; left: -20px; background: #00d4c8; }
+
+    /* ── Changelog ── */
+    .changelog { padding: 3rem 2rem 4rem; max-width: 800px; margin: 0 auto; }
+    .changelog h2 { text-align: center; font-size: 2rem; margin-bottom: 2rem; }
+    .version { margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; transition: border-color 0.2s; }
+    .version:hover { border-color: rgba(255,255,255,0.12); }
+    .version-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; background: rgba(20,20,40,0.6); backdrop-filter: blur(8px); user-select: none; }
+    .version-header:hover { background: rgba(25,25,50,0.7); }
+    .version-tag { display: flex; align-items: center; gap: 10px; }
+    .version-num { font-weight: 700; font-size: 15px; color: #ddd; }
+    .version-label { font-size: 13px; color: #666; }
+    .version-current { background: linear-gradient(135deg, #00d4ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .version-chevron { color: #555; transition: transform 0.2s; font-size: 12px; }
     .version-chevron.open { transform: rotate(180deg); }
-    .version-body { padding: 0 20px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; background: #0f0f25; }
-    .version-body.open { max-height: 800px; padding: 20px; }
-    .version-body ul { list-style: none; padding: 0; }
-    .version-body li { padding: 6px 0; font-size: 14px; color: #bbb; display: flex; align-items: flex-start; gap: 8px; }
-    .version-body li::before { content: ''; min-width: 6px; height: 6px; border-radius: 50%; background: #00d4ff; margin-top: 7px; }
-    .pro-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(0,212,255,0.12); color: #00d4ff; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
-    .coming-soon { font-size: 11px; color: #555; margin-top: 2px; }
+    .version-body { padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; background: rgba(15,15,37,0.4); }
+    .version-body.open { max-height: 600px; padding: 16px 18px; }
+    .version-body ul { list-style: none; }
+    .version-body li { padding: 5px 0; font-size: 13px; color: #999; display: flex; align-items: flex-start; gap: 8px; }
+    .version-body li::before { content: ''; min-width: 5px; height: 5px; border-radius: 50%; background: #00d4ff; margin-top: 7px; flex-shrink: 0; }
+    .pro-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(123,47,247,0.12); color: #b87bff; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
 
-    .footer { text-align: center; padding: 3rem 2rem; color: #444; font-size: 12px; }
+    /* ── Footer ── */
+    .footer { text-align: center; padding: 2.5rem 2rem; color: #333; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.04); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.8rem; }
+      .cta { padding: 12px 24px; font-size: 0.95rem; }
+      .cards { grid-template-columns: 1fr; }
+      nav { padding: 12px 16px; }
+      .nav-links a:not(.nav-badge) { display: none; }
+    }
   </style>
 </head>
 <body>
+
+  <!-- Nav -->
+  <nav>
+    <a class="nav-logo" href="#">
+      <img src="logo.png" alt="oko" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+      <span>O</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="https://github.com/zechengccc-alt/oko" target="_blank">GitHub</a>
+      <span class="nav-badge">v2.1</span>
+    </div>
+  </nav>
+
+  <!-- Hero -->
   <div class="hero">
-    <img class="logo" src="logo.png" alt="oko" onerror="this.style.display='none'">
-    <h1>oko</h1>
-    <p class="tagline">Privacy-first AI assistant. 100% local. No cloud. No tracking. Your data never leaves your machine.</p>
-    <div class="badges">
-      <span class="badge badge-trial">21-Day Free Trial</span>
-      <span class="badge badge-pro">Pro Buy-Once License</span>
-    </div>
-    <div class="btn-group">
-      <a href="https://github.com/zechengccc-alt/oko/releases/latest" class="btn btn-primary">Download for macOS</a>
-      <a href="#" class="btn btn-android" onclick="return false;">Android (Coming Soon)</a>
-      <button class="btn btn-outline" onclick="window.open('https://buy.stripe.com/TODO_REPLACE','_blank')">Buy Pro</button>
-    </div>
-  </div>
-
-  <div class="features">
-    <h2>Why oko?</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2rem;">
-      <div style="background:#141428;border:1px solid #2a2a4a;border-radius:16px;padding:2rem;"><h3 style="color:#00d4ff;margin-bottom:0.75rem;">100% Private</h3><p style="color:#888;font-size:0.95rem;">Your data never leaves your device. Everything runs locally.</p></div>
-      <div style="background:#141428;border:1px solid #2a2a4a;border-radius:16px;padding:2rem;"><h3 style="color:#00d4ff;margin-bottom:0.75rem;">Fast & Offline</h3><p style="color:#888;font-size:0.95rem;">No internet required. Works offline with local AI models via Ollama.</p></div>
-      <div style="background:#141428;border:1px solid #2a2a4a;border-radius:16px;padding:2rem;"><h3 style="color:#00d4ff;margin-bottom:0.75rem;">Smart Memory</h3><p style="color:#888;font-size:0.95rem;">SQLite-backed persistent sessions. oko remembers your context.</p></div>
-      <div style="background:#141428;border:1px solid #2a2a4a;border-radius:16px;padding:2rem;"><h3 style="color:#00d4ff;margin-bottom:0.75rem;">Free Core</h3><p style="color:#888;font-size:0.95rem;">Core chat is free forever. 21-day Pro trial. Buy once, own forever.</p></div>
+    <img class="hero-logo" src="logo.png" alt="oko" onerror="this.outerHTML='<div class=hero-logo style=display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#00d4ff,#7b2ff7);font-size:2.5rem;font-weight:800;color:#fff;border-radius:24px>O</div>'">
+    <h1>Oko</h1>
+    <p class="tagline">Your AI. Your device. Zero cloud. All processing stays on your machine — your data never leaves.</p>
+    <div class="cta-group">
+      <a href="https://github.com/zechengccc-alt/oko/releases/latest" class="cta cta-download" id="downloadBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download for macOS
+      </a>
+      <a href="https://buy.stripe.com/TODO_REPLACE" class="cta cta-pro" id="proBtn" target="_blank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Buy Pro
+      </a>
     </div>
   </div>
 
+  <!-- Features -->
+  <div class="features" id="features">
+    <div class="features-header">
+      <h2>Why Oko</h2>
+      <p>Three pillars of digital sovereignty</p>
+    </div>
+    <div class="cards">
+
+      <!-- Card 1: On-Device RAG -->
+      <div class="card card-rag">
+        <div class="card-glow"></div>
+        <div class="card-icon">&#x1F30D;</div>
+        <h3>100% On-Device RAG</h3>
+        <p>Retrieval-Augmented Generation that never phones home. Your documents, your context, your rules — processed entirely on your hardware. Zero cloud dependency. Zero data leakage.</p>
+      </div>
+
+      <!-- Card 2: Multimodal Vision -->
+      <div class="card card-vision">
+        <div class="card-glow"></div>
+        <div class="card-icon">&#x1F441;</div>
+        <h3>Sub-Second Vision</h3>
+        <p>Drop a screenshot, receipt, or handwritten note — Oko parses it instantly with on-device multimodal models. No upload. No server-side OCR. Just fast, private understanding.</p>
+      </div>
+
+      <!-- Card 3: Infinite Local Memory -->
+      <div class="card card-memory">
+        <div class="card-glow"></div>
+        <div class="card-icon">&#x2B50;</div>
+        <h3>SQLite Infinite Memory</h3>
+        <p>Every conversation, every context shift — stored locally in SQLite. Oko builds a persistent knowledge graph of your workflow across sessions. No subscriptions, no data caps.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Changelog -->
   <div class="changelog">
     <h2>Version History</h2>
 
-    <!-- v2.1 — CURRENT, default open -->
     <div class="version">
       <div class="version-header" onclick="toggleVersion(this)">
         <div class="version-tag">
@@ -94,22 +183,17 @@
       <div class="version-body open">
         <ul>
           <li>21-day no-card-required Pro trial (zero registration, zero network)</li>
-          <li><span class="pro-tag">PRO</span> Multimodal Vision Pipeline - parse handwritten receipts & invoices</li>
-          <li><span class="pro-tag">PRO</span> Smart Data Mapping - custom Excel templates with auto-append</li>
-          <li><span class="pro-tag">PRO</span> System-Level Silent Capture - global hotkey screen grab + automation</li>
-          <li><span class="pro-tag">PRO</span> Multi-App Chain Agent - SMS to Excel to email drafts</li>
-          <li><span class="pro-tag">PRO</span> Smart Incremental DB - append-only with SUM formula updates</li>
-          <li><span class="pro-tag">PRO</span> AI Playground - model switching + custom system prompts</li>
+          <li><span class="pro-tag">PRO</span> Multimodal Vision Pipeline — parse handwritten receipts & invoices</li>
+          <li><span class="pro-tag">PRO</span> Smart Data Mapping — custom Excel templates with auto-append</li>
           <li><span class="pro-tag">PRO</span> Drag & Drop file parsing (PDF, images)</li>
-          <li>Deep Link activation: oko://activate?token= (Stripe callback handshake)</li>
+          <li><span class="pro-tag">PRO</span> AI Playground — model switching + custom system prompts</li>
+          <li>Deep Link activation: oko://activate?token= (Stripe callback)</li>
           <li>Buy-once license key: OKO-XXXX-XXXX-XXXX with local checksum</li>
-          <li>Digital sovereignty status indicator (terminal-log style)</li>
-          <li>Graceful Pro sleep mode on expiry (gray card, no error popups)</li>
+          <li>Dual-Bridge Architecture: Tier 1 (gemma2:2b) + Tier 2 (phi3:3.8b)</li>
         </ul>
       </div>
     </div>
 
-    <!-- v2.0 — collapsed -->
     <div class="version">
       <div class="version-header" onclick="toggleVersion(this)">
         <div class="version-tag">
@@ -121,10 +205,9 @@
       <div class="version-body">
         <ul>
           <li>Deep blue + aurora gradient background theme</li>
-          <li>Frosted glass sidebar & settings panel (BackdropFilter)</li>
-          <li>Dynamic task status cards (pending / running / done)</li>
-          <li>Table preview + "Open Full Table" button</li>
-          <li>Settings panel overhaul: Profile, Language, Privacy Console (9 toggles)</li>
+          <li>Frosted glass sidebar & settings panel</li>
+          <li>Dynamic task status cards</li>
+          <li>Settings panel: Profile, Language, Privacy Console (9 toggles)</li>
           <li>Pro upgrade card with activation code entry</li>
           <li>App icon replaced with aurora sphere</li>
           <li>Project renamed from Ono to Oko</li>
@@ -132,7 +215,6 @@
       </div>
     </div>
 
-    <!-- v1.1 — collapsed -->
     <div class="version">
       <div class="version-header" onclick="toggleVersion(this)">
         <div class="version-tag">
@@ -146,13 +228,11 @@
           <li>Ollama backend auto-start via Process.start</li>
           <li>SQLite persistent conversation storage</li>
           <li>Settings page with model/theme/font controls</li>
-          <li>macOS Sandbox disabled for local networking</li>
           <li>Auto-update checker (GitHub Releases API)</li>
         </ul>
       </div>
     </div>
 
-    <!-- v1.0 — collapsed -->
     <div class="version">
       <div class="version-header" onclick="toggleVersion(this)">
         <div class="version-tag">
@@ -167,14 +247,13 @@
           <li>Privacy-first: all processing on-device</li>
           <li>macOS app built with PyInstaller backend embedding</li>
           <li>Dark/light theme support</li>
-          <li>Basic chat interface with streaming responses</li>
         </ul>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    oko &middot; Privacy-first AI &middot; AGPL v3 &middot; Built with Flutter + Ollama
+    Oko &middot; Privacy-first AI &middot; AGPL v3 &middot; Built with Flutter + Ollama
   </div>
 
   <script>
