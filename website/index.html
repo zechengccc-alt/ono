@@ -9,7 +9,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a1a; color: #fff; min-height: 100vh; }
     .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem; background: radial-gradient(ellipse at 30% 50%, rgba(0,212,255,0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 50%, rgba(123,47,247,0.08) 0%, transparent 50%), #0a0a1a; }
-    .logo { width: 120px; height: 120px; border-radius: 28px; margin-bottom: 2rem; background: linear-gradient(135deg, #00d4ff, #7b2ff7, #ff2d95); display: flex; align-items: center; justify-content: center; font-size: 48px; font-weight: 700; color: white; animation: logoPulse 4s ease-in-out infinite; }
+    .logo { width: 120px; height: 120px; border-radius: 28px; margin-bottom: 2rem; animation: logoPulse 4s ease-in-out infinite; }
     @keyframes logoPulse { 0%,100% { box-shadow: 0 0 40px rgba(0,212,255,0.15); } 50% { box-shadow: 0 0 60px rgba(123,47,247,0.25); } }
     h1 { font-size: 3.5rem; font-weight: 700; margin-bottom: 1rem; background: linear-gradient(135deg, #00d4ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .tagline { font-size: 1.25rem; color: #aaa; max-width: 600px; margin-bottom: 2rem; line-height: 1.6; }
@@ -17,17 +17,18 @@
     .badge { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .badge-pro { background: rgba(0,212,255,0.12); color: #00d4ff; border: 1px solid rgba(0,212,255,0.3); }
     .badge-trial { background: rgba(123,47,247,0.12); color: #b87bff; border: 1px solid rgba(123,47,247,0.3); }
-    .btn-group { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    .btn-group { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: center; }
     .btn { display: inline-block; padding: 1rem 2.5rem; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 1.1rem; transition: transform 0.2s; cursor: pointer; border: none; }
     .btn:hover { transform: scale(1.05); }
     .btn-primary { background: linear-gradient(135deg, #00d4ff, #7b2ff7); }
     .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.2); }
     .btn-outline:hover { border-color: rgba(0,212,255,0.5); }
+    .btn-android { background: transparent; border: 1px solid rgba(0,200,100,0.3); color: #00c864; }
+    .btn-android:hover { border-color: rgba(0,200,100,0.6); transform: scale(1.05); }
 
     .features { padding: 4rem 2rem; max-width: 1000px; margin: 0 auto; }
     .features h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
 
-    /* Changelog */
     .changelog { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; }
     .changelog h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
     .version { margin-bottom: 16px; border: 1px solid #2a2a4a; border-radius: 12px; overflow: hidden; transition: border-color 0.2s; }
@@ -46,13 +47,14 @@
     .version-body li { padding: 6px 0; font-size: 14px; color: #bbb; display: flex; align-items: flex-start; gap: 8px; }
     .version-body li::before { content: ''; min-width: 6px; height: 6px; border-radius: 50%; background: #00d4ff; margin-top: 7px; }
     .pro-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(0,212,255,0.12); color: #00d4ff; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
+    .coming-soon { font-size: 11px; color: #555; margin-top: 2px; }
 
     .footer { text-align: center; padding: 3rem 2rem; color: #444; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="hero">
-    <div class="logo">O</div>
+    <img class="logo" src="logo.png" alt="oko" onerror="this.style.display='none'">
     <h1>oko</h1>
     <p class="tagline">Privacy-first AI assistant. 100% local. No cloud. No tracking. Your data never leaves your machine.</p>
     <div class="badges">
@@ -61,6 +63,7 @@
     </div>
     <div class="btn-group">
       <a href="https://github.com/zechengccc-alt/oko/releases/latest" class="btn btn-primary">Download for macOS</a>
+      <a href="#" class="btn btn-android" onclick="return false;">Android (Coming Soon)</a>
       <button class="btn btn-outline" onclick="window.open('https://buy.stripe.com/TODO_REPLACE','_blank')">Buy Pro</button>
     </div>
   </div>
@@ -91,12 +94,12 @@
       <div class="version-body open">
         <ul>
           <li>21-day no-card-required Pro trial (zero registration, zero network)</li>
-          <li><span class="pro-tag">PRO</span> Multimodal Vision Pipeline — parse handwritten receipts & invoices</li>
-          <li><span class="pro-tag">PRO</span> Smart Data Mapping — custom Excel templates with auto-append</li>
-          <li><span class="pro-tag">PRO</span> System-Level Silent Capture — global hotkey screen grab + automation</li>
-          <li><span class="pro-tag">PRO</span> Multi-App Chain Agent — SMS to Excel to email drafts</li>
-          <li><span class="pro-tag">PRO</span> Smart Incremental DB — append-only with SUM formula updates</li>
-          <li><span class="pro-tag">PRO</span> AI Playground — model switching + custom system prompts</li>
+          <li><span class="pro-tag">PRO</span> Multimodal Vision Pipeline - parse handwritten receipts & invoices</li>
+          <li><span class="pro-tag">PRO</span> Smart Data Mapping - custom Excel templates with auto-append</li>
+          <li><span class="pro-tag">PRO</span> System-Level Silent Capture - global hotkey screen grab + automation</li>
+          <li><span class="pro-tag">PRO</span> Multi-App Chain Agent - SMS to Excel to email drafts</li>
+          <li><span class="pro-tag">PRO</span> Smart Incremental DB - append-only with SUM formula updates</li>
+          <li><span class="pro-tag">PRO</span> AI Playground - model switching + custom system prompts</li>
           <li><span class="pro-tag">PRO</span> Drag & Drop file parsing (PDF, images)</li>
           <li>Deep Link activation: oko://activate?token= (Stripe callback handshake)</li>
           <li>Buy-once license key: OKO-XXXX-XXXX-XXXX with local checksum</li>
